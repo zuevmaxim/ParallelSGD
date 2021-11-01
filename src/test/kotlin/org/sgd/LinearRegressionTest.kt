@@ -2,6 +2,7 @@ package org.sgd
 
 import jetbrains.letsPlot.export.ggsave
 import jetbrains.letsPlot.geom.geomLine
+import jetbrains.letsPlot.geom.geomPoint
 import jetbrains.letsPlot.letsPlot
 import org.junit.Test
 import kotlin.math.pow
@@ -10,12 +11,13 @@ import kotlin.random.Random
 
 class LinearRegressionTest {
 
-    @Test fun solverCompare() {
-        val iterations = mutableListOf<Int>()
+    @Test
+    fun solverCompare() {
+        val timeS = mutableListOf<Double>()
         val trainLoss = mutableListOf<Double>()
         val solverNames = mutableListOf<String>()
 
-        val iterationsNumber = 50
+        val iterationsNumber = 30
         val solvers = listOf(
             SimpleSGDSolver(iterationsNumber, 0.0002),
             SimpleParallelSGDSolver(iterationsNumber, 0.00004, 12),
@@ -28,30 +30,32 @@ class LinearRegressionTest {
         val (test, train) = dataset.split(0.5)
         val loss = LinearRegressionLoss(train)
 
+        println("Dataset loss: " + LinearRegressionLoss(test).loss(coefficients))
         for (solver in solvers) {
+            val name = solver.javaClass.simpleName
             val result = solver.solve(loss, DoubleArray(features + 1))
 
-            println("$solver Dataset loss: " + LinearRegressionLoss(test).loss(coefficients))
-            println("$solver Test loss: " + LinearRegressionLoss(test).loss(result.w))
+            println("$name Test loss: " + LinearRegressionLoss(test).loss(result.w))
 
-            for (tl in result.lossIterations.withIndex().drop(10)) {
-                iterations.add(tl.index)
-                trainLoss.add(tl.value)
-                solverNames.add(solver.javaClass.name)
+            for ((timeNs, lossValue) in result.timeNsToLoss.filterValues { it < 10.0 }) {
+                timeS.add(timeNs / 1e9)
+                trainLoss.add(lossValue)
+                solverNames.add(name)
             }
         }
 
         val data = mutableMapOf(
-            "iteration" to iterations,
+            "time(s)" to timeS,
             "train loss" to trainLoss,
             "solver" to solverNames
         )
-        var plot = letsPlot (data) {
-            x = "iteration"
+        var plot = letsPlot(data) {
+            x = "time(s)"
             y = "train loss"
             color = "solver"
         }
         plot += geomLine()
+        plot += geomPoint()
         ggsave(plot, "compare.png")
     }
 }
