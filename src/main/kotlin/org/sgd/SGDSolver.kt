@@ -2,6 +2,7 @@ package org.sgd
 
 import kotlinx.atomicfu.atomic
 import java.lang.invoke.MethodHandles
+import kotlin.math.ceil
 import kotlin.math.pow
 
 class SGDResult(val w: Weights, val lossIterations: DoubleArray)
@@ -61,6 +62,12 @@ class SimpleParallelSGDSolver(
     }
 }
 
+
+private class ClusterData(val w: Weights, val wPrev: Weights, val clusterId: Int) {
+    @Volatile
+    var nextThread: Int = 0
+}
+
 class ClusterParallelSGDSolver(
     private val iterations: Int,
     private val alpha: Double,
@@ -69,26 +76,8 @@ class ClusterParallelSGDSolver(
     private val stepsBeforeTokenPass: Int = 1000
 ) : SGDSolver {
     private val AA = MethodHandles.arrayElementVarHandle(DoubleArray::class.java)
-    private val beta = computeBeta()
+    private val beta = findRoot { x -> x.pow(clusters) + x - 1.0 }
     private val lambda = 1 - beta.pow(clusters - 1)
-
-    private fun computeBeta(): Double {
-        var l = 0.0
-        var r = 1.0
-        val eps = 1e-10
-        while (r - l > eps) {
-            val m = (r + l) / 2
-            if (m.pow(clusters) + m < 1.0) {
-                l = m
-            } else {
-                r = m
-            }
-        }
-        return (l + r) / 2
-    }
-
-    private class ClusterData(val w: Weights, val wPrev: Weights, val clusterId: Int, @Volatile var nextThread: Int)
-
     private val token = atomic(-1)
 
     @Volatile
@@ -96,15 +85,17 @@ class ClusterParallelSGDSolver(
 
 
     override fun solve(loss: DataSetLoss, initial: Weights): SGDResult {
-        clustersData = List(clusters) { i -> ClusterData(initial.copyOf(), initial.copyOf(), i, 0) }
+        clustersData = List(clusters) { i -> ClusterData(initial.copyOf(), initial.copyOf(), i) }
 
         val lossIterations = DoubleArray(iterations)
-        val threadsPerCluster = threads / clusters
-        val threads = List(threads) { i -> Thread { threadSolve(clustersData[i / threadsPerCluster], i % threadsPerCluster, (i + 1) % threadsPerCluster, loss, lossIterations) } }
+        val threadsPerCluster = ceil(threads / clusters.toDouble()).toInt()
+        val threads = List(threads) { i -> Thread { threadSolve(clustersData[i / threadsPerCluster], i % threadsPerCluster, ((i + 1) % threads) % threadsPerCluster, loss, lossIterations) } }
         threads.forEach { it.start() }
         token.incrementAndGet()
         threads.forEach { it.join() }
 
+
+        // result is the average of the weights
         initial.resetToZero()
         for (data in clustersData) {
             initial.add(data.w)
@@ -130,15 +121,11 @@ class ClusterParallelSGDSolver(
                 }
 
                 if (!locked) {
-                    var tokenValue = token.value
-                    while (tokenValue >= 0 && clusterData.clusterId == tokenValue % clusters && threadId == clusterData.nextThread) {
-                        if (token.compareAndSet(tokenValue, -(tokenValue + 1))) {
-                            locked = true
-                            break
-                        }
-                        tokenValue = token.value
-                    }
-                    if (locked) {
+                    val tokenValue = token.value
+                    if (tokenValue >= 0 && clusterData.clusterId == tokenValue && threadId == clusterData.nextThread) {
+                        assert(token.compareAndSet(tokenValue, -(clusterData.clusterId + 1)))
+                        locked = true
+
                         val next = (clusterData.clusterId + 1) % clusters
                         repeat(clusterData.w.size) { i ->
                             val delta = clusterData.w[i] - clusterData.wPrev[i]
@@ -160,4 +147,22 @@ class ClusterParallelSGDSolver(
             lossIterations[iteration] = loss.loss(clusterData.w)
         }
     }
+}
+
+/**
+ * @param f a monotonically non-decreasing function
+ */
+private inline fun findRoot(f: (Double) -> Double): Double {
+    var l = 0.0
+    var r = 1.0
+    val eps = 1e-10
+    while (r - l > eps) {
+        val m = (r + l) / 2
+        if (f(m) < 0.0) {
+            l = m
+        } else {
+            r = m
+        }
+    }
+    return (l + r) / 2
 }
