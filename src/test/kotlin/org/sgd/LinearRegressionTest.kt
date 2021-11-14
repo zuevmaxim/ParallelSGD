@@ -18,10 +18,13 @@ class LinearRegressionTest {
         val solverNames = mutableListOf<String>()
 
         val iterationsNumber = 100
+        val learningRate = 0.00004
+        val threads = Runtime.getRuntime().availableProcessors()
+        val clusters = 4
         val solvers = listOf(
-            SequentialSGDSolver(iterationsNumber, 0.00004),
-            ParallelSGDSolver(iterationsNumber, 0.00004, 12),
-            ClusterParallelSGDSolver(iterationsNumber, 0.00004, 12, 4)
+            SequentialSGDSolver(iterationsNumber, learningRate),
+            ParallelSGDSolver(iterationsNumber, learningRate, threads),
+            ClusterParallelSGDSolver(iterationsNumber, learningRate, threads, clusters)
         )
 
         val features = 10000
