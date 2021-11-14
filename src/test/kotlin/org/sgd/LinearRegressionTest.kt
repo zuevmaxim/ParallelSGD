@@ -12,6 +12,11 @@ import kotlin.random.Random
 class LinearRegressionTest {
 
     @Test
+    fun testNumaConfig() {
+        println(numaConfig)
+    }
+
+    @Test
     fun solverCompare() {
         val timeS = mutableListOf<Double>()
         val trainLoss = mutableListOf<Double>()
@@ -19,12 +24,12 @@ class LinearRegressionTest {
 
         val iterationsNumber = 100
         val learningRate = 0.00004
+        val stepDecay = 0.99
         val threads = Runtime.getRuntime().availableProcessors()
-        val clusters = 4
         val solvers = listOf(
-            SequentialSGDSolver(iterationsNumber, learningRate),
-            ParallelSGDSolver(iterationsNumber, learningRate, threads),
-            ClusterParallelSGDSolver(iterationsNumber, learningRate, threads, clusters)
+            SequentialSGDSolver(iterationsNumber, learningRate, stepDecay),
+            ParallelSGDSolver(iterationsNumber, learningRate, threads, stepDecay),
+            ClusterParallelSGDSolver(iterationsNumber, learningRate, threads, stepDecay),
         )
 
         val features = 10000
@@ -35,8 +40,8 @@ class LinearRegressionTest {
         val testLoss = LinearRegressionLoss(test)
 
         println("Dataset loss: " + testLoss.loss(coefficients))
-        for (solver in solvers) {
-            val name = solver.javaClass.simpleName
+        for ((i, solver) in solvers.withIndex()) {
+            val name = solver.javaClass.simpleName + i
             val result = solver.solve(loss, DoubleArray(features + 1))
 
             println("$name Test loss: " + testLoss.loss(result.w))

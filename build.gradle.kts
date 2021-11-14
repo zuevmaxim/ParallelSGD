@@ -23,9 +23,13 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:atomicfu:0.16.3")
 
-    implementation("org.jetbrains.lets-plot:lets-plot-common:2.1.0")
-    implementation("org.jetbrains.lets-plot:lets-plot-image-export:2.1.0")
-    implementation("org.jetbrains.lets-plot:lets-plot-kotlin-jvm:3.0.2")
+    implementation("net.openhft:affinity:3.21ea82") // bind thread to core
+    implementation("com.github.oshi:oshi-core:5.8.3") // retrieve NUMA configuration
+
+    // plots
+    implementation("org.jetbrains.lets-plot:lets-plot-common:2.2.0")
+    implementation("org.jetbrains.lets-plot:lets-plot-image-export:2.2.0")
+    implementation("org.jetbrains.lets-plot:lets-plot-kotlin-jvm:3.1.0")
 
 
     testImplementation("org.jetbrains.kotlin:kotlin-test")
