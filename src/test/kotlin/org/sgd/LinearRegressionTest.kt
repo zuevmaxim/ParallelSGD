@@ -17,10 +17,10 @@ class LinearRegressionTest {
         val trainLoss = mutableListOf<Double>()
         val solverNames = mutableListOf<String>()
 
-        val iterationsNumber = 30
+        val iterationsNumber = 100
         val solvers = listOf(
-            SimpleSGDSolver(iterationsNumber, 0.0002),
-            SimpleParallelSGDSolver(iterationsNumber, 0.00004, 12),
+            SequentialSGDSolver(iterationsNumber, 0.00004),
+            ParallelSGDSolver(iterationsNumber, 0.00004, 12),
             ClusterParallelSGDSolver(iterationsNumber, 0.00004, 12, 4)
         )
 
@@ -29,15 +29,16 @@ class LinearRegressionTest {
         val (dataset, coefficients) = generateRandomDataSet(features, size)
         val (test, train) = dataset.split(0.5)
         val loss = LinearRegressionLoss(train)
+        val testLoss = LinearRegressionLoss(test)
 
-        println("Dataset loss: " + LinearRegressionLoss(test).loss(coefficients))
+        println("Dataset loss: " + testLoss.loss(coefficients))
         for (solver in solvers) {
             val name = solver.javaClass.simpleName
             val result = solver.solve(loss, DoubleArray(features + 1))
 
-            println("$name Test loss: " + LinearRegressionLoss(test).loss(result.w))
+            println("$name Test loss: " + testLoss.loss(result.w))
 
-            for ((timeNs, lossValue) in result.timeNsToLoss.filterValues { it < 10.0 }) {
+            for ((timeNs, lossValue) in result.timeNsToWeights.mapValues { testLoss.loss(it.value) }.filterValues { it < 2 }) {
                 timeS.add(timeNs / 1e9)
                 trainLoss.add(lossValue)
                 solverNames.add(name)
