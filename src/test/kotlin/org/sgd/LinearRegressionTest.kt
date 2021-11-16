@@ -22,15 +22,17 @@ class LinearRegressionTest {
         val trainLoss = mutableListOf<Double>()
         val solverNames = mutableListOf<String>()
 
+        val threadsList = mutableListOf<Int>()
+        val solversList = mutableListOf<String>()
+        val maxTimeList = mutableListOf<Double>()
+
         val iterationsNumber = 100
-        val learningRate = 0.00004
+
+        val learningRate = 0.00025
         val stepDecay = 0.99
         val threads = Runtime.getRuntime().availableProcessors()
-        val solvers = listOf(
-            SequentialSGDSolver(iterationsNumber, learningRate, stepDecay),
-            ParallelSGDSolver(iterationsNumber, learningRate, threads, stepDecay),
-            ClusterParallelSGDSolver(iterationsNumber, learningRate, threads, stepDecay),
-        )
+        val solvers = List(threads) { i -> Triple("simple", i + 1, ParallelSGDSolver(iterationsNumber, learningRate / (i + 1), i + 1, stepDecay)) } +
+            List(threads) { i -> Triple("cluster", i + 1, ClusterParallelSGDSolver(iterationsNumber, learningRate / (i + 1), i + 1, stepDecay)) }
 
         val features = 10000
         val size = 40000
@@ -40,11 +42,15 @@ class LinearRegressionTest {
         val testLoss = LinearRegressionLoss(test)
 
         println("Dataset loss: " + testLoss.loss(coefficients))
-        for ((i, solver) in solvers.withIndex()) {
-            val name = solver.javaClass.simpleName + i
+        for ((name, threads, solver) in solvers) {
             val result = solver.solve(loss, DoubleArray(features + 1))
 
-            println("$name Test loss: " + testLoss.loss(result.w))
+            val totalTimeS = result.timeNsToWeights.keys.maxOrNull()!! / 1e9
+            println("$name $threads time: $totalTimeS s; Test loss: " + testLoss.loss(result.w))
+
+            threadsList.add(threads)
+            solversList.add(name)
+            maxTimeList.add(totalTimeS)
 
             for ((timeNs, lossValue) in result.timeNsToWeights.mapValues { testLoss.loss(it.value) }.filterValues { it < 2 }) {
                 timeS.add(timeNs / 1e9)
@@ -66,6 +72,21 @@ class LinearRegressionTest {
         plot += geomLine()
         plot += geomPoint()
         ggsave(plot, "compare.png")
+
+
+        val dataTime = mutableMapOf(
+            "time(s)" to maxTimeList,
+            "threads" to threadsList,
+            "solver" to solversList
+        )
+        var plotTime = letsPlot(dataTime) {
+            x = "threads"
+            y = "time(s)"
+            color = "solver"
+        }
+        plotTime += geomLine()
+        plotTime += geomPoint()
+        ggsave(plotTime, "time.png")
     }
 }
 
