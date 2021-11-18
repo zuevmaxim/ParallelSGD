@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test
 import java.io.File
 import kotlin.math.exp
 import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 
@@ -33,12 +34,12 @@ class LinearRegressionTest {
 
         val iterationsNumber = 200
 
-        val learningRate = 0.8
+        val learningRate = 0.5
         val stepDecay = 0.95
         val threads = mutableListOf<Int>() .apply {
             var t = Runtime.getRuntime().availableProcessors().toDouble()
             while (t.toInt() > 0) {
-                add(t.toInt())
+                add(t.roundToInt())
                 t /= sqrt(2.0)
             }
         }.reversed()

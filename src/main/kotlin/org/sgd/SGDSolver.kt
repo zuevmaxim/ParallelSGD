@@ -16,13 +16,16 @@ interface SGDSolver {
 inline fun scheduledTask(
     timeNsToWeights: LinkedHashMap<Long, Weights>,
     crossinline accessWeights: () -> Weights
-): () -> Boolean {
+): () -> Unit {
     val startNs = System.nanoTime()
     val scheduler = Executors.newScheduledThreadPool(1)
     val future = scheduler.scheduleAtFixedRate({
         timeNsToWeights[System.nanoTime() - startNs] = accessWeights()
     }, 0, 1000, TimeUnit.MILLISECONDS)
-    return { future.cancel(true) }
+    return {
+        future.cancel(true)
+        timeNsToWeights[System.nanoTime() - startNs] = accessWeights()
+    }
 }
 
 class SequentialSGDSolver(
