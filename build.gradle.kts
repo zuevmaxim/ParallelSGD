@@ -32,5 +32,11 @@ dependencies {
     implementation("org.jetbrains.lets-plot:lets-plot-kotlin-jvm:3.1.0")
 
 
-    testImplementation("org.jetbrains.kotlin:kotlin-test")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.8.1")
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.8.1")
+    testImplementation("org.junit.jupiter:junit-jupiter-engine:5.8.1")
+}
+
+tasks.withType<Test> {
+    useJUnitPlatform()
 }

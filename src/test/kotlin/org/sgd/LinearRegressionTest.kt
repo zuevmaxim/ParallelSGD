@@ -4,117 +4,165 @@ import jetbrains.letsPlot.export.ggsave
 import jetbrains.letsPlot.geom.geomLine
 import jetbrains.letsPlot.geom.geomPoint
 import jetbrains.letsPlot.letsPlot
-import org.junit.Test
+import org.junit.jupiter.api.Test
+import java.io.File
+import kotlin.math.exp
 import kotlin.math.pow
-import kotlin.random.Random
+import kotlin.math.sqrt
 
 
 class LinearRegressionTest {
 
     @Test
     fun testNumaConfig() {
-        println(numaConfig)
+        for ((node, cpus) in numaConfig) {
+            println("$node $cpus")
+        }
     }
 
     @Test
     fun solverCompare() {
-        val timeS = mutableListOf<Double>()
-        val trainLoss = mutableListOf<Double>()
+        val timeMs = mutableListOf<Double>()
+        val truePrecision = mutableListOf<Double>()
+        val falsePrecision = mutableListOf<Double>()
         val solverNames = mutableListOf<String>()
 
         val threadsList = mutableListOf<Int>()
         val solversList = mutableListOf<String>()
         val maxTimeList = mutableListOf<Double>()
 
-        val iterationsNumber = 100
+        val iterationsNumber = 200
 
-        val learningRate = 0.00025
-        val stepDecay = 0.99
-        val threads = Runtime.getRuntime().availableProcessors()
-        val solvers = List(threads) { i -> Triple("simple", i + 1, ParallelSGDSolver(iterationsNumber, learningRate / (i + 1), i + 1, stepDecay)) } +
-            List(threads) { i -> Triple("cluster", i + 1, ClusterParallelSGDSolver(iterationsNumber, learningRate / (i + 1), i + 1, stepDecay)) }
+        val learningRate = 0.8
+        val stepDecay = 0.95
+        val threads = mutableListOf<Int>() .apply {
+            var t = Runtime.getRuntime().availableProcessors().toDouble()
+            while (t.toInt() > 0) {
+                add(t.toInt())
+                t /= sqrt(2.0)
+            }
+        }.reversed()
+        val solvers = listOf(Triple("sequential", 1, SequentialSGDSolver(iterationsNumber, learningRate, stepDecay))) +
+            threads.map { i -> Triple("simple", i, ParallelSGDSolver(iterationsNumber, learningRate, i, stepDecay)) } +
+            threads.map { i -> Triple("cluster", i, ClusterParallelSGDSolver(iterationsNumber, learningRate, i, stepDecay)) }
 
-        val features = 10000
-        val size = 40000
-        val (dataset, coefficients) = generateRandomDataSet(features, size)
-        val (test, train) = dataset.split(0.5)
-        val loss = LinearRegressionLoss(train)
-        val testLoss = LinearRegressionLoss(test)
+        val testDataSet = loadDataSet(File("w8a.t"))
+        val trainDataSet = loadDataSet(File("w8a"))
+        val features = testDataSet.points.asSequence().plus(trainDataSet.points).maxOf { it.indices.maxOrNull() ?: 0 } + 1
+        val loss = LinearRegressionLoss(trainDataSet)
+        val testLoss = LinearRegressionLoss(testDataSet)
 
-        println("Dataset loss: " + testLoss.loss(coefficients))
         for ((name, threads, solver) in solvers) {
             val result = solver.solve(loss, DoubleArray(features + 1))
 
-            val totalTimeS = result.timeNsToWeights.keys.maxOrNull()!! / 1e9
-            println("$name $threads time: $totalTimeS s; Test loss: " + testLoss.loss(result.w))
+            val totalTimeMs = result.timeNsToWeights.keys.maxOrNull()!! / 1e6
+            val (tp, fp) = testLoss.precision(result.w)
+            println("$name $threads time: $totalTimeMs ms; $tp $fp")
 
             threadsList.add(threads)
             solversList.add(name)
-            maxTimeList.add(totalTimeS)
+            maxTimeList.add(totalTimeMs)
 
-            for ((timeNs, lossValue) in result.timeNsToWeights.mapValues { testLoss.loss(it.value) }.filterValues { it < 2 }) {
-                timeS.add(timeNs / 1e9)
-                trainLoss.add(lossValue)
-                solverNames.add(name)
+            for ((timeNs, lv) in result.timeNsToWeights.mapValues { testLoss.precision(it.value) }) {
+                timeMs.add(timeNs / 1e6)
+                truePrecision.add(lv.first)
+                falsePrecision.add(lv.second)
+                solverNames.add(name + threads)
             }
         }
 
-        val data = mutableMapOf(
-            "time(s)" to timeS,
-            "train loss" to trainLoss,
-            "solver" to solverNames
-        )
-        var plot = letsPlot(data) {
-            x = "time(s)"
-            y = "train loss"
-            color = "solver"
-        }
-        plot += geomLine()
-        plot += geomPoint()
-        ggsave(plot, "compare.png")
+        plotPrecision(timeMs, solverNames, truePrecision, "true")
+        plotPrecision(timeMs, solverNames, falsePrecision, "false")
 
 
         val dataTime = mutableMapOf(
-            "time(s)" to maxTimeList,
+            "time(ms)" to maxTimeList,
             "threads" to threadsList,
             "solver" to solversList
         )
         var plotTime = letsPlot(dataTime) {
             x = "threads"
-            y = "time(s)"
+            y = "time(ms)"
             color = "solver"
         }
         plotTime += geomLine()
         plotTime += geomPoint()
         ggsave(plotTime, "time.png")
     }
-}
 
-class LinearRegressionLoss(dataSet: DataSet) : DataSetLoss(dataSet) {
-    override fun pointLoss(p: DataPoint) = LinearRegressionPointLoss(p)
-}
-
-class LinearRegressionPointLoss(private val p: DataPoint) : DataPointLoss {
-    override fun loss(w: Weights) = (p.y - w.dot(p.x)).pow(2)
-
-    override fun grad(w: Weights, buffer: Weights): Weights {
-        require(buffer.size == w.size)
-        val s = 2 * (w.dot(p.x) - p.y)
-        repeat(buffer.size) { i ->
-            buffer[i] = p.x[i] * s
+    private fun plotPrecision(timeMs: List<Double>, solverNames: List<String>, precision: List<Double>, name: String) {
+        val data = mutableMapOf(
+            "time(ms)" to timeMs,
+            "precision" to precision,
+            "solver" to solverNames
+        )
+        var plot = letsPlot(data) {
+            x = "time(ms)"
+            y = "precision"
+            color = "solver"
         }
-        return buffer
+        plot += geomLine()
+        plot += geomPoint()
+        ggsave(plot, "$name.png")
     }
 }
 
-private fun generateRandomDataSet(features: Int, size: Int): Pair<DataSet, DoubleArray> {
-    val random = Random(42)
-    val coefficients = Weights(features + 1) { random.nextDouble(-10.0, 10.0) }
-    fun generateFeatures() = Features(features + 1) { i -> if (i == 0) 1.0 else random.nextDouble(1.0) }
-    fun y(x: Features) = coefficients.dot(x) + random.nextDouble(-1.0, 1.0)
-    return DataSet(Array(size) {
-        val f = generateFeatures()
-        DataPoint(f, y(f))
-    }) to coefficients
+class LinearRegressionLoss(private val dataSet: DataSet) : DataSetLoss(dataSet) {
+    override fun pointLoss(p: DataPoint) = LinearRegressionPointLoss(p)
+
+    fun precision(w: Weights): Pair<Double, Double> {
+        var truePositive = 0
+        var falsePositive = 0
+        var trueNegative = 0
+        var falseNegative = 0
+        for (point in dataSet.points) {
+            val prediction = if (dot(w, point) >= 0) 1.0 else 0.0
+            if (prediction == 1.0) {
+                if (prediction == point.y) truePositive ++ else falsePositive++
+            } else {
+                if (prediction == point.y) trueNegative++ else falseNegative++
+            }
+        }
+        return truePositive.toDouble() / (truePositive + falseNegative) to trueNegative.toDouble() / (trueNegative + falsePositive)
+    }
 }
+
+class LinearRegressionPointLoss(private val p: DataPoint) : DataPointLoss {
+    override fun loss(w: Weights) = (p.y - if (dot(w, p) >= 0.0) 1.0 else 0.0).pow(2)
+
+    override fun gradientStep(w: Weights, learningRate: Double) {
+        val indices = p.indices
+        val xs = p.xValues
+        val e = exp(-dot(w, p))
+        repeat(indices.size) { i ->
+            w[indices[i]] -= learningRate * xs[i] * (1 / (1 + e) - p.y)
+        }
+        w[w.size - 1] -= learningRate * (1 / (1 + e) - p.y)
+    }
+}
+
+private fun dot(w: Weights, p:DataPoint): Double {
+    var s = w[w.size - 1]
+    val indices = p.indices
+    val xs = p.xValues
+    repeat(indices.size) { i ->
+        s += xs[i] * w[indices[i]]
+    }
+    return s
+}
+
+
+private fun loadDataSet(file: File): DataSet {
+    val points = mutableListOf<DataPoint>()
+    file.useLines { lines ->
+        lines.forEach { line ->
+            val parts = line.trim().split(" ")
+            val y = if (parts[0].toInt() == 1) 1.0 else 0.0
+            val (indices, values) = parts.drop(1).map { val (id, count) = it.split(':'); id.toInt() to count.toDouble() }.unzip()
+            points.add(DataPoint(indices.toIntArray(), values.toDoubleArray(), y))
+        }
+    }
+    return DataSet(points)
+}
+
 

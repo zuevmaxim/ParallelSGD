@@ -1,8 +1,8 @@
 package org.sgd
 
-import org.junit.Test
-import kotlin.test.assertContains
-import kotlin.test.assertEquals
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 
 internal class ShuffleTest {
@@ -15,7 +15,7 @@ internal class ShuffleTest {
             c.shuffle()
             assertEquals(list.size, c.size)
             for (e in list) {
-                assertContains(c, e)
+                assertTrue(c.contains(e))
             }
         }
     }

@@ -2,32 +2,24 @@ package org.sgd
 
 import kotlin.random.Random
 
-typealias Features = DoubleArray
-typealias Value = Double
 typealias LossValue = Double
 typealias Weights = DoubleArray
 
-class DataPoint(val x: Features, val y: Value) {
-    val dimension get() = x.size
-}
+class DataPoint(val indices: IntArray, val xValues: DoubleArray, val y: Double)
 
-class DataSet(val points: Array<DataPoint>) {
-    init {
-        require(points.all { it.dimension == points[0].dimension }) { "DataSet points must have same dimension." }
-    }
-
+class DataSet(val points: List<DataPoint>) {
     val size get() = points.size
 
     fun split(part: Double): Pair<DataSet, DataSet> {
         require(0.0 < part && part < 1.0)
         val n = (size * part).toInt()
-        return DataSet(points.copyOfRange(0, n)) to DataSet(points.copyOfRange(n, size))
+        return DataSet(points.subList(0, n).toList()) to DataSet(points.subList(n, size).toList())
     }
 }
 
 interface DataPointLoss {
     fun loss(w: Weights): LossValue
-    fun grad(w: Weights, buffer: Weights): Weights
+    fun gradientStep(w: Weights, learningRate: Double)
 }
 
 abstract class DataSetLoss(dataSet: DataSet) {
