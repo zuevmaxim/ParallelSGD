@@ -135,15 +135,17 @@ class LinearRegressionPointLoss(private val p: DataPoint) : DataPointLoss {
         val indices = p.indices
         val xs = p.xValues
         val e = exp(-dot(w, p))
+        val grad = learningRate * (1 / (1 + e) - p.y)
         repeat(indices.size) { i ->
-            w[indices[i]] -= learningRate * xs[i] * (1 / (1 + e) - p.y)
+            w[indices[i]] -= xs[i] * grad
         }
-        w[w.size - 1] -= learningRate * (1 / (1 + e) - p.y)
+        w[w.size - 1] -= grad
     }
 }
 
 private fun dot(w: Weights, p:DataPoint): Double {
-    var s = w[w.size - 1]
+    var s = 0.0
+    s += w[w.size - 1]
     val indices = p.indices
     val xs = p.xValues
     repeat(indices.size) { i ->
