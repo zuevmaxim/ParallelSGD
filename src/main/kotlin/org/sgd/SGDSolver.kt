@@ -4,28 +4,40 @@ import kotlinx.atomicfu.atomic
 import java.lang.invoke.MethodHandles
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.pow
 
 
 class SGDResult(val w: Weights, val timeNsToWeights: LinkedHashMap<Long, Weights>)
 
 interface SGDSolver {
-    fun solve(loss: DataSetLoss, initial: Weights): SGDResult
+    fun solve(loss: DataSetLoss, testLoss: DataSetLoss, initial: Weights, targetLoss: LossValue): SGDResult
 }
 
-inline fun scheduledTask(
-    timeNsToWeights: LinkedHashMap<Long, Weights>,
-    crossinline accessWeights: () -> Weights
-): () -> Unit {
+
+inline fun measureIterations(
+    testLoss: DataSetLoss,
+    targetLoss: LossValue,
+    crossinline accessWeights: () -> Weights,
+    iterations: (AtomicBoolean) -> Unit
+): LinkedHashMap<Long, Weights> {
+    val stop = AtomicBoolean(false)
+    val timeNsToWeights = linkedMapOf<Long, Weights>()
+
     val startNs = System.nanoTime()
-    val scheduler = Executors.newScheduledThreadPool(1)
-    val future = scheduler.scheduleAtFixedRate({
-        timeNsToWeights[System.nanoTime() - startNs] = accessWeights()
-    }, 0, 1000, TimeUnit.MILLISECONDS)
-    return {
-        future.cancel(true)
-        timeNsToWeights[System.nanoTime() - startNs] = accessWeights()
-    }
+
+    val future = Executors.newScheduledThreadPool(1).scheduleAtFixedRate({
+        val weights = accessWeights()
+        val timeNs = System.nanoTime() - startNs
+        timeNsToWeights[timeNs] = weights
+        val currentLoss = testLoss.loss(weights)
+        if (currentLoss <= targetLoss) {
+            stop.set(true)
+        }
+    }, 0, 100, TimeUnit.MILLISECONDS)
+    iterations(stop)
+    future.cancel(false)
+    return timeNsToWeights
 }
 
 class SequentialSGDSolver(
@@ -33,39 +45,38 @@ class SequentialSGDSolver(
     private val alpha: Double,
     private val stepDecay: Double
 ) : SGDSolver {
-    override fun solve(loss: DataSetLoss, initial: Weights): SGDResult {
+    override fun solve(loss: DataSetLoss, testLoss: DataSetLoss, initial: Weights, targetLoss: LossValue): SGDResult {
         val w = initial
         val fs = loss.pointLoss.toMutableList()
-        val timeToLoss = linkedMapOf<Long, Weights>()
-
-        val stop = scheduledTask(timeToLoss) { w.copyOf() }
-        var learningRate = alpha
-        repeat(iterations) {
-            fs.shuffle()
-            repeat(fs.size) {
-                fs[it].gradientStep(w, learningRate)
+        val timeToLoss = measureIterations(testLoss, targetLoss, { w.copyOf() }) {
+            var learningRate = alpha
+            repeat(iterations) {
+                fs.shuffle()
+                repeat(fs.size) {
+                    fs[it].gradientStep(w, learningRate)
+                }
+                learningRate *= stepDecay
             }
-            learningRate *= stepDecay
         }
-        stop()
         return SGDResult(w, timeToLoss)
     }
 }
 
 class ParallelSGDSolver(
-    private val iterations: Int,
     private val alpha: Double,
     private val threads: Int,
     private val stepDecay: Double
 ) : SGDSolver {
-    override fun solve(loss: DataSetLoss, initial: Weights): SGDResult {
-        val timeToLoss = linkedMapOf<Long, Weights>()
+    private lateinit var stop: AtomicBoolean
+
+    override fun solve(loss: DataSetLoss, testLoss: DataSetLoss, initial: Weights, targetLoss: LossValue): SGDResult {
         val tasks = numaConfig.values.flatten().take(threads).map { threadId -> Thread { threadSolve(initial, threadId, loss) } }
-        val stop = scheduledTask(timeToLoss) { initial.copyOf() }
-        tasks
-            .onEach { it.start() }
-            .forEach { it.join() }
-        stop()
+        val timeToLoss = measureIterations(testLoss, targetLoss, { initial.copyOf() }) {
+            stop = it
+            tasks
+                .onEach { it.start() }
+                .forEach { it.join() }
+        }
 
         return SGDResult(initial, timeToLoss)
     }
@@ -74,7 +85,8 @@ class ParallelSGDSolver(
         bindCurrentThreadToCpu(threadId)
         val points = loss.pointLoss.toMutableList()
         var learningRate = alpha
-        repeat(iterations) {
+        val stop = stop
+        while (!stop.get()) {
             points.shuffle()
             repeat(points.size) {
                 points[it].gradientStep(w, learningRate)
@@ -91,13 +103,13 @@ private class ClusterData(val w: Weights, val wPrev: Weights, val clusterId: Int
 }
 
 class ClusterParallelSGDSolver(
-    private val iterations: Int,
     private val alpha: Double,
     private val threads: Int,
     private val stepDecay: Double,
     private val stepsBeforeTokenPass: Int = 1000
 ) : SGDSolver {
     private val clusters: List<List<Int>>
+    private lateinit var stop: AtomicBoolean
 
     init {
         check(threads <= numaConfig.values.sumOf { it.size })
@@ -117,11 +129,8 @@ class ClusterParallelSGDSolver(
     @Volatile
     private lateinit var clustersData: List<ClusterData>
 
-
-    override fun solve(loss: DataSetLoss, initial: Weights): SGDResult {
+    override fun solve(loss: DataSetLoss, testLoss: DataSetLoss, initial: Weights, targetLoss: LossValue): SGDResult {
         clustersData = clusters.indices.map { i -> ClusterData(initial.copyOf(), initial.copyOf(), i) }
-
-        val timeToLoss = linkedMapOf<Long, Weights>()
 
         var activeCores = 0
         val tasks = clusters.withIndex().flatMap { (clusterId, cores) ->
@@ -130,11 +139,12 @@ class ClusterParallelSGDSolver(
                 .map { i -> Thread { threadSolve(clustersData[clusterId], cores[i], cores[(i + 1) % cores.size], loss) } }
                 .also { activeCores += it.size }
         }
-        val stop = scheduledTask(timeToLoss) { getResults(DoubleArray(initial.size)) }
-        tasks
-            .onEach { it.start() }
-            .forEach { it.join() }
-        stop()
+        val timeToLoss = measureIterations(testLoss, targetLoss, { getResults(DoubleArray(initial.size)) }) {
+            stop = it
+            tasks
+                .onEach { it.start() }
+                .forEach { it.join() }
+        }
 
         return SGDResult(getResults(initial), timeToLoss)
     }
@@ -160,7 +170,8 @@ class ClusterParallelSGDSolver(
         var step = 0
         var locked = false
         val shouldSync = clusters.size > 1
-        repeat(iterations) {
+        val stop = stop
+        while (!stop.get()) {
             points.shuffle()
 
             repeat(points.size) {
