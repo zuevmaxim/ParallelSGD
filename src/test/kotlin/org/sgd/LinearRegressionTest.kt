@@ -84,7 +84,7 @@ class LinearRegressionTest {
     @Test
     fun solverCompare() {
         val learningRate = 0.1
-        val stepDecay = 0.85
+        val stepDecay = 0.95
         val threads = mutableListOf<Int>().apply {
             var t = Runtime.getRuntime().availableProcessors().toDouble()
             while (t.toInt() > 0) {
@@ -101,12 +101,12 @@ class LinearRegressionTest {
         val loss = LinearRegressionLoss(trainDataSet)
         val testLoss = LinearRegressionLoss(testDataSet)
         val log = File(baseDir, "$DATASET.txt").writer().buffered()
-
+        print("DataSet loaded")
         for ((name, threads, solver) in solvers) {
             val runs = 5
             val (timeMs, tp, mse) = generateSequence {
                 System.gc()
-                val result = solver.solve(loss, testLoss, DoubleArray(features + 1), 0.1)
+                val result = solver.solve(loss, testLoss, DoubleArray(features + 1), 0.102)
                 val lastResult = result.timeNsToWeights.maxByOrNull { it.key }!!
                 val totalTimeMs = lastResult.key / 1e6
                 val (tp, _) = testLoss.precision(lastResult.value)
