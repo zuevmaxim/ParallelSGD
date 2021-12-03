@@ -101,7 +101,7 @@ class LinearRegressionTest {
         val loss = LinearRegressionLoss(trainDataSet)
         val testLoss = LinearRegressionLoss(testDataSet)
         val log = File(baseDir, "$DATASET.txt").writer().buffered()
-        print("DataSet loaded")
+        println("DataSet loaded")
         for ((name, threads, solver) in solvers) {
             val runs = 5
             val (timeMs, tp, mse) = generateSequence {
