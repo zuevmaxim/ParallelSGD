@@ -9,7 +9,8 @@ import java.io.File
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
-const val DATASET = "w8a"
+val baseDir = File("/home/maksim.zuev/datasets")
+const val DATASET = "epsilon_normalized"
 
 class LinearRegressionTest {
 
@@ -22,27 +23,35 @@ class LinearRegressionTest {
 
     @Test
     fun sequentialSolver() {
-        val testDataSet = loadDataSet(File("$DATASET.t"))
-        val trainDataSet = loadDataSet(File(DATASET))
+        val testDataSet = loadDataSet(File(baseDir, "$DATASET.t"))
+        val trainDataSet = loadDataSet(File(baseDir, DATASET))
+        print("DataSet loaded")
         val features = testDataSet.points.asSequence().plus(trainDataSet.points).maxOf { it.indices.maxOrNull() ?: 0 } + 1
+        println("Features $features")
         val loss = LinearRegressionLoss(trainDataSet)
         val testLoss = LinearRegressionLoss(testDataSet)
 
-        val bestIterations = 1000
+        var bestIterations = 0
         var bestLearningRate = 0.0
         var bestStepDecay = 0.0
         var bestLoss = Double.MAX_VALUE
+        for (iterations in listOf(1, 2, 5, 10, 20)) {
+            for (learningRate in 1..100 step 10) {
+                for (stepDecay in 80..100 step 10) {
+                    val currentLoss = generateSequence {
+                        System.gc()
+                        val solver = SequentialSGDSolver(iterations, learningRate / 100.0, stepDecay / 100.0)
+                        val result = solver.solve(loss, testLoss, DoubleArray(features + 1), 0.0)
+                        testLoss.loss(result.w)
+                    }.take(3).average()
 
-        for (learningRate in 20..100 step 5) {
-            for (stepDecay in 90..100) {
-                val solver = SequentialSGDSolver(bestIterations, learningRate / 100.0, stepDecay / 100.0)
-                val result = solver.solve(loss, testLoss, DoubleArray(features + 1), 0.0)
-                val currentLoss = testLoss.loss(result.w)
-                println("$learningRate $stepDecay $currentLoss")
-                if (currentLoss < bestLoss) {
-                    bestLoss = currentLoss
-                    bestLearningRate = learningRate / 100.0
-                    bestStepDecay = stepDecay / 100.0
+                    println("$iterations $learningRate $stepDecay $currentLoss")
+                    if (currentLoss < bestLoss) {
+                        bestIterations = iterations
+                        bestLoss = currentLoss
+                        bestLearningRate = learningRate / 100.0
+                        bestStepDecay = stepDecay / 100.0
+                    }
                 }
             }
         }
@@ -57,21 +66,25 @@ class LinearRegressionTest {
         val timeMs = mutableListOf<Double>()
         val truePrecision = mutableListOf<Double>()
         val falsePrecision = mutableListOf<Double>()
+        val losss = mutableListOf<Double>()
         val solverNames = mutableListOf<String>()
-        for ((timeNs, lv) in result.timeNsToWeights.mapValues { testLoss.precision(it.value) }) {
+        for ((timeNs, w) in result.timeNsToWeights) {
+            val (tp, fp) = testLoss.precision(w)
             timeMs.add(timeNs / 1e6)
-            truePrecision.add(lv.first)
-            falsePrecision.add(lv.second)
+            truePrecision.add(tp)
+            falsePrecision.add(fp)
             solverNames.add("sequential")
+            losss.add(testLoss.loss(w))
         }
         plotPrecision(timeMs, solverNames, truePrecision, "true")
         plotPrecision(timeMs, solverNames, falsePrecision, "false")
+        plotPrecision(timeMs, solverNames, losss, "loss")
     }
 
     @Test
     fun solverCompare() {
-        val learningRate = 0.26
-        val stepDecay = 1.0
+        val learningRate = 0.2
+        val stepDecay = 0.95
         val threads = mutableListOf<Int>().apply {
             var t = Runtime.getRuntime().availableProcessors().toDouble()
             while (t.toInt() > 0) {
@@ -82,15 +95,15 @@ class LinearRegressionTest {
         val solvers = threads.map { i -> Triple("simple", i, ParallelSGDSolver(learningRate, i, stepDecay)) } +
             threads.map { i -> Triple("cluster", i, ClusterParallelSGDSolver(learningRate, i, stepDecay)) }
 
-        val testDataSet = loadDataSet(File("$DATASET.t"))
-        val trainDataSet = loadDataSet(File(DATASET))
+        val testDataSet = loadDataSet(File(baseDir, "$DATASET.t"))
+        val trainDataSet = loadDataSet(File(baseDir, DATASET))
         val features = testDataSet.points.asSequence().plus(trainDataSet.points).maxOf { it.indices.maxOrNull() ?: 0 } + 1
         val loss = LinearRegressionLoss(trainDataSet)
         val testLoss = LinearRegressionLoss(testDataSet)
-        val log = File("$DATASET.txt").writer().buffered()
+        val log = File(baseDir, "$DATASET.txt").writer().buffered()
 
         for ((name, threads, solver) in solvers) {
-            val runs = 20
+            val runs = 5
             val (timeMs, tp, mse) = generateSequence {
                 System.gc()
                 val result = solver.solve(loss, testLoss, DoubleArray(features + 1), 0.012)
@@ -98,11 +111,12 @@ class LinearRegressionTest {
                 val totalTimeMs = lastResult.key / 1e6
                 val (tp, _) = testLoss.precision(lastResult.value)
                 val mse = testLoss.loss(lastResult.value)
+                println("$name, $threads, $totalTimeMs, $tp, $mse")
                 log.write("$name, $threads, $totalTimeMs, $tp, $mse\n")
                 Triple(totalTimeMs, tp, mse)
-            }.drop(5).take(runs).fold(Triple(0.0, 0.0, 0.0)) { acc, x -> acc + x } / runs
+            }.drop(2).take(runs).fold(Triple(0.0, 0.0, 0.0)) { acc, x -> acc + x } / runs
 
-            println("$name $threads time: $timeMs ms; $tp $mse")
+            println("===$name $threads time: $timeMs ms; $tp $mse")
         }
         log.close()
     }

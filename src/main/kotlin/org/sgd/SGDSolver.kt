@@ -6,6 +6,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.pow
+import kotlin.random.Random
 
 
 class SGDResult(val w: Weights, val timeNsToWeights: LinkedHashMap<Long, Weights>)
@@ -47,13 +48,15 @@ class SequentialSGDSolver(
 ) : SGDSolver {
     override fun solve(loss: DataSetLoss, testLoss: DataSetLoss, initial: Weights, targetLoss: LossValue): SGDResult {
         val w = initial
-        val fs = loss.pointLoss.toMutableList()
+        val fs = loss.pointLoss
+        val random = Random
+        val n = fs.size
         val timeToLoss = measureIterations(testLoss, targetLoss, { w.copyOf() }) {
             var learningRate = alpha
             repeat(iterations) {
-                fs.shuffle()
-                repeat(fs.size) {
-                    fs[it].gradientStep(w, learningRate)
+                repeat(n) {
+                    val i = random.nextInt(n)
+                    fs[i].gradientStep(w, learningRate)
                 }
                 learningRate *= stepDecay
             }
@@ -83,13 +86,15 @@ class ParallelSGDSolver(
 
     private fun threadSolve(w: Weights, threadId: Int, loss: DataSetLoss) {
         bindCurrentThreadToCpu(threadId)
-        val points = loss.pointLoss.toMutableList()
+        val points = loss.pointLoss
         var learningRate = alpha
         val stop = stop
+        val n = points.size
+        val random = Random(threadId)
         while (!stop.get()) {
-            points.shuffle()
-            repeat(points.size) {
-                points[it].gradientStep(w, learningRate)
+            repeat(n) {
+                val i = random.nextInt(n)
+                points[i].gradientStep(w, learningRate)
             }
             learningRate *= stepDecay
         }
@@ -164,18 +169,19 @@ class ClusterParallelSGDSolver(
     private fun threadSolve(clusterData: ClusterData, threadId: Int, nextThreadId: Int, loss: DataSetLoss) {
         bindCurrentThreadToCpu(threadId)
         val w = clusterData.w
-        val points = loss.pointLoss.toMutableList()
+        val points = loss.pointLoss
         var learningRate = alpha
 
         var step = 0
         var locked = false
         val shouldSync = clusters.size > 1
         val stop = stop
+        val n = points.size
+        val random  = Random(threadId)
         while (!stop.get()) {
-            points.shuffle()
-
-            repeat(points.size) {
-                points[it].gradientStep(w, learningRate)
+            repeat(n) {
+                val i = random.nextInt(n)
+                points[i].gradientStep(w, learningRate)
 
                 if (shouldSync) {
                     if (!locked) {
