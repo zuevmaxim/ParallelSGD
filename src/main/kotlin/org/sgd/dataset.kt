@@ -1,6 +1,8 @@
 package org.sgd
 
+import java.io.File
 import kotlin.random.Random
+import kotlin.system.measureTimeMillis
 
 typealias LossValue = Double
 typealias Weights = DoubleArray
@@ -30,6 +32,22 @@ abstract class DataSetLoss(dataSet: DataSet) {
     fun loss(w: Weights): LossValue = pointLoss.sumOf { it.loss(w) } / pointLoss.size
 }
 
+
+fun loadDataSet(file: File): DataSet {
+    val points = mutableListOf<DataPoint>()
+    val timeMs = measureTimeMillis {
+        file.useLines { lines ->
+            lines.forEach { line ->
+                val parts = line.trim().split(" ")
+                val y = if (parts[0].toInt() == 1) 1.0 else 0.0
+                val (indices, values) = parts.drop(1).map { val (id, count) = it.split(':'); id.toInt() to count.toDouble() }.unzip()
+                points.add(DataPoint(indices.toIntArray(), values.toDoubleArray(), y))
+            }
+        }
+    }
+    println("Dataset ${file.name} loaded in $timeMs ms")
+    return DataSet(points)
+}
 
 fun DoubleArray.resetToZero() {
     repeat(size) {

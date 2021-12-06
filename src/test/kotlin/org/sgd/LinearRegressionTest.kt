@@ -1,16 +1,68 @@
 package org.sgd
 
-import jetbrains.letsPlot.export.ggsave
-import jetbrains.letsPlot.geom.geomLine
-import jetbrains.letsPlot.geom.geomPoint
-import jetbrains.letsPlot.letsPlot
+import kotlinx.smartbench.benchmark.Benchmark
+import kotlinx.smartbench.benchmark.MeasurementMode
+import kotlinx.smartbench.benchmark.param
+import kotlinx.smartbench.benchmark.runBenchmark
+import kotlinx.smartbench.declarative.Operation
+import kotlinx.smartbench.graphic.PlotConfiguration
+import kotlinx.smartbench.graphic.Scaling
+import kotlinx.smartbench.graphic.ValueAxis
+import org.apache.batik.svggen.font.table.Table.name
 import org.junit.jupiter.api.Test
 import java.io.File
+import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
-import kotlin.math.sqrt
 
-val baseDir = File("/home/maksim.zuev/datasets")
-const val DATASET = "epsilon_normalized"
+const val AVERAGE_LOSS_METRIC = "average loss"
+
+val baseDir =
+    File("/home/maksim.zuev/datasets")
+//    File(".")
+
+const val DATASET = "rcv1"
+
+val train by lazy { loadDataSet(File(baseDir, DATASET)) }
+val test by lazy { loadDataSet(File(baseDir, "$DATASET.t")) }
+val features by lazy { test.points.asSequence().plus(train.points).maxOf { it.indices.maxOrNull() ?: 0 } }
+
+class RunRegressionTask(
+    val method: String, val learningRate: Double, val stepDecay: Double, val workingThreads: Int, val targetLoss: Double
+) : Benchmark() {
+    private val trainLoss = LinearRegressionLoss(train)
+    private val testLoss = LinearRegressionLoss(test)
+
+    @Operation
+    fun run(): LossValue {
+        val solver = when (method) {
+            "simple" -> ParallelSGDSolver(learningRate, workingThreads, stepDecay)
+            "cluster" -> ClusterParallelSGDSolver(learningRate, workingThreads, stepDecay)
+            else -> error("Unknown method $method")
+        }
+        val result = solver.solve(trainLoss, testLoss, DoubleArray(features + 1), targetLoss)
+        return testLoss.loss(result.w)
+    }
+}
+
+class SequentialRegressionTask(
+    val learningRate: Double, val stepDecay: Double, val iterations: Int
+) : Benchmark() {
+    val trainLoss = LinearRegressionLoss(train)
+    val testLoss = LinearRegressionLoss(test)
+    var loss = BenchmarkCounter()
+    val counter = BenchmarkCounter()
+
+    @Operation
+    fun run(): LossValue {
+        val solver = SequentialSGDSolver(iterations, learningRate, stepDecay)
+        val result = solver.solve(trainLoss, testLoss, DoubleArray(features + 1), 0.0)
+        return testLoss.loss(result.w).also {
+            val scale = 1e3.toLong()
+            loss.inc((it * scale).toLong())
+            counter.inc(scale)
+        }
+    }
+}
 
 class LinearRegressionTest {
 
@@ -23,134 +75,75 @@ class LinearRegressionTest {
 
     @Test
     fun sequentialSolver() {
-        val testDataSet = loadDataSet(File(baseDir, "$DATASET.t"))
-        val trainDataSet = loadDataSet(File(baseDir, DATASET))
-        print("DataSet loaded")
-        val features = testDataSet.points.asSequence().plus(trainDataSet.points).maxOf { it.indices.maxOrNull() ?: 0 } + 1
-        println("Features $features")
-        val loss = LinearRegressionLoss(trainDataSet)
-        val testLoss = LinearRegressionLoss(testDataSet)
-
-        var bestIterations = 0
-        var bestLearningRate = 0.0
-        var bestStepDecay = 0.0
-        var bestLoss = Double.MAX_VALUE
-        for (iterations in listOf(1, 2, 5, 10, 20)) {
-            for (learningRate in 1..100 step 10) {
-                for (stepDecay in 80..100 step 10) {
-                    val currentLoss = generateSequence {
-                        System.gc()
-                        val solver = SequentialSGDSolver(iterations, learningRate / 100.0, stepDecay / 100.0)
-                        val result = solver.solve(loss, testLoss, DoubleArray(features + 1), 0.0)
-                        testLoss.loss(result.w)
-                    }.take(3).average()
-
-                    println("$iterations $learningRate $stepDecay $currentLoss")
-                    if (currentLoss < bestLoss) {
-                        bestIterations = iterations
-                        bestLoss = currentLoss
-                        bestLearningRate = learningRate / 100.0
-                        bestStepDecay = stepDecay / 100.0
-                    }
-                }
+        runBenchmark<SequentialRegressionTask> {
+            param(SequentialRegressionTask::learningRate, 0.06)
+            param(SequentialRegressionTask::stepDecay, 1.0)
+            param(SequentialRegressionTask::iterations, 100)
+            approximateBatchSize(10)
+            measurementMode(MeasurementMode.AVERAGE_TIME, TimeUnit.SECONDS)
+            metric(AVERAGE_LOSS_METRIC) { loss.value / counter.value.toDouble() }
+        }.run {
+            plot(xParameter = SequentialRegressionTask::learningRate) {
+                valueAxis(ValueAxis.CustomMetric(AVERAGE_LOSS_METRIC))
             }
         }
-
-        println("$bestIterations $bestLearningRate $bestStepDecay")
-        val solver = SequentialSGDSolver(bestIterations, bestLearningRate, bestStepDecay)
-        val result = solver.solve(loss, testLoss, DoubleArray(features + 1), 0.0)
-        val totalTimeMs = result.timeNsToWeights.keys.maxOrNull()!! / 1e6
-        val (tp, fp) = testLoss.precision(result.w)
-        val lv = testLoss.loss(result.w)
-        println("time: $totalTimeMs ms; $tp $fp $lv")
-        val timeMs = mutableListOf<Double>()
-        val truePrecision = mutableListOf<Double>()
-        val falsePrecision = mutableListOf<Double>()
-        val losss = mutableListOf<Double>()
-        val solverNames = mutableListOf<String>()
-        for ((timeNs, w) in result.timeNsToWeights) {
-            val (tp, fp) = testLoss.precision(w)
-            timeMs.add(timeNs / 1e6)
-            truePrecision.add(tp)
-            falsePrecision.add(fp)
-            solverNames.add("sequential")
-            losss.add(testLoss.loss(w))
-        }
-        plotPrecision(timeMs, solverNames, truePrecision, "true")
-        plotPrecision(timeMs, solverNames, falsePrecision, "false")
-        plotPrecision(timeMs, solverNames, losss, "loss")
     }
 
     @Test
     fun solverCompare() {
-        val learningRate = 0.1
-        val stepDecay = 0.95
-        val threads = mutableListOf<Int>().apply {
-            var t = Runtime.getRuntime().availableProcessors().toDouble()
-            while (t.toInt() > 0) {
-                add(t.roundToInt())
-                t /= sqrt(2.0)
+        runBenchmark<RunRegressionTask> {
+            param(RunRegressionTask::method, "simple", "cluster")
+            param(RunRegressionTask::learningRate, 0.06)
+            param(RunRegressionTask::stepDecay, 1.0)
+            param(RunRegressionTask::targetLoss, 0.013)
+            param(RunRegressionTask::workingThreads, logSequence(Runtime.getRuntime().availableProcessors()))
+            approximateBatchSize(5)
+            measurementMode(MeasurementMode.AVERAGE_TIME, TimeUnit.SECONDS)
+//            attachProfiler(Profiler.LINUX_PEF_NORM_PROFILER)
+        }.run {
+            File("results").run {
+                mkdir()
+                println(absolutePath)
             }
-        }.reversed()
-        val solvers = threads.map { i -> Triple("simple", i, ParallelSGDSolver(learningRate, i, stepDecay)) } +
-            threads.map { i -> Triple("cluster", i, ClusterParallelSGDSolver(learningRate, i, stepDecay)) }
+            val configure: PlotConfiguration<RunRegressionTask>.(name: String) -> Unit = {
+                useErrorBars(true)
+                yScaling(Scaling.LOGARITHMIC)
+                filename("results/$name.png")
+            }
 
-        val testDataSet = loadDataSet(File(baseDir, "$DATASET.t"))
-        val trainDataSet = loadDataSet(File(baseDir, DATASET))
-        val features = testDataSet.points.asSequence().plus(trainDataSet.points).maxOf { it.indices.maxOrNull() ?: 0 } + 1
-        val loss = LinearRegressionLoss(trainDataSet)
-        val testLoss = LinearRegressionLoss(testDataSet)
-        val log = File(baseDir, "$DATASET.txt").writer().buffered()
-        println("DataSet loaded")
-        for ((name, threads, solver) in solvers) {
-            val runs = 5
-            val (timeMs, tp, mse) = generateSequence {
-                System.gc()
-                val result = solver.solve(loss, testLoss, DoubleArray(features + 1), 0.102)
-                val lastResult = result.timeNsToWeights.maxByOrNull { it.key }!!
-                val totalTimeMs = lastResult.key / 1e6
-                val (tp, _) = testLoss.precision(lastResult.value)
-                val mse = testLoss.loss(lastResult.value)
-                println("$name, $threads, $totalTimeMs, $tp, $mse")
-                log.write("$name, $threads, $totalTimeMs, $tp, $mse\n")
-                Triple(totalTimeMs, tp, mse)
-            }.drop(2).take(runs).fold(Triple(0.0, 0.0, 0.0)) { acc, x -> acc + x } / runs
-
-            println("===$name $threads time: $timeMs ms; $tp $mse")
+            plot(xParameter = RunRegressionTask::workingThreads) {
+                configure("time")
+            }
+//                plot(xParameter = RunRegressionTask::workingThreads) {
+//                    useErrorBars(true)
+//                    valueAxis(ValueAxis.LLC_stores)
+//                    filename("results/LLC_stores.png")
+//                }
+//                plot(xParameter = RunRegressionTask::workingThreads) {
+//                    useErrorBars(true)
+//                    valueAxis(ValueAxis.LLC_loads)
+//                    filename("results/LLC_loads.png")
+//                }
+//                plot(xParameter = RunRegressionTask::workingThreads) {
+//                    useErrorBars(true)
+//                    valueAxis(ValueAxis.LLC_load_misses)
+//                    filename("results/LLC_load_misses.png")
+//                }
+//                plot(xParameter = RunRegressionTask::workingThreads) {
+//                    useErrorBars(true)
+//                    valueAxis(ValueAxis.LLC_store_misses)
+//                    filename("results/LLC_store_misses.png")
+//                }
         }
-        log.close()
-    }
-
-    private fun plotPrecision(timeMs: List<Double>, solverNames: List<String>, precision: List<Double>, name: String) {
-        val data = mutableMapOf(
-            "time(ms)" to timeMs,
-            "precision" to precision,
-            "solver" to solverNames
-        )
-        var plot = letsPlot(data) {
-            x = "time(ms)"
-            y = "precision"
-            color = "solver"
-        }
-        plot += geomLine()
-        plot += geomPoint()
-        ggsave(plot, "$name.png")
     }
 }
 
-
-private fun loadDataSet(file: File): DataSet {
-    val points = mutableListOf<DataPoint>()
-    file.useLines { lines ->
-        lines.forEach { line ->
-            val parts = line.trim().split(" ")
-            val y = if (parts[0].toInt() == 1) 1.0 else 0.0
-            val (indices, values) = parts.drop(1).map { val (id, count) = it.split(':'); id.toInt() to count.toDouble() }.unzip()
-            points.add(DataPoint(indices.toIntArray(), values.toDoubleArray(), y))
-        }
+fun logSequence(maxValue: Int, step: Double = 2.0): List<Int> {
+    var value = maxValue.toDouble()
+    val result = hashSetOf<Int>()
+    while (value >= 1.0) {
+        result.add(value.roundToInt())
+        value /= step
     }
-    return DataSet(points)
+    return result.toList().sorted()
 }
-
-operator fun Triple<Double, Double, Double>.plus(other: Triple<Double, Double, Double>) = Triple(first + other.first, second + other.second, third + other.third)
-operator fun Triple<Double, Double, Double>.div(other: Number) = Triple(first / other.toDouble(), second / other.toDouble(), third / other.toDouble())

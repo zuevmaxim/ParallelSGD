@@ -15,7 +15,7 @@ tasks.withType<Test> {
 
 repositories {
     mavenCentral()
-    maven("https://repo.kotlin.link")
+    mavenLocal()
 }
 
 dependencies {
@@ -26,15 +26,14 @@ dependencies {
     implementation("net.openhft:affinity:3.21ea82") // bind thread to core
     implementation("com.github.oshi:oshi-core:5.8.3") // retrieve NUMA configuration
 
-    // plots
-    implementation("org.jetbrains.lets-plot:lets-plot-common:2.2.0")
-    implementation("org.jetbrains.lets-plot:lets-plot-image-export:2.2.0")
-    implementation("org.jetbrains.lets-plot:lets-plot-kotlin-jvm:3.1.0")
-
+    implementation("org.jetbrains.kotlinx:smartbench:0.1-SNAPSHOT")
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.8.1")
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.8.1")
     testImplementation("org.junit.jupiter:junit-jupiter-engine:5.8.1")
+
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.8.1")
+    testRuntimeOnly("org.junit.vintage:junit-vintage-engine:5.8.1")
 }
 
 tasks.withType<Test> {
