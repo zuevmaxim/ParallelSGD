@@ -24,13 +24,12 @@ inline fun measureIterations(
 ): LinkedHashMap<Long, Weights> {
     val stop = AtomicBoolean(false)
     val timeNsToWeights = linkedMapOf<Long, Weights>()
-
-    val startNs = System.nanoTime()
-
-    val future = Executors.newScheduledThreadPool(1).scheduleAtFixedRate({
+//    val startNs = System.nanoTime()
+    val scheduledThreadPool = Executors.newScheduledThreadPool(1)
+    val future = scheduledThreadPool.scheduleAtFixedRate({
         val weights = accessWeights()
-        val timeNs = System.nanoTime() - startNs
-        timeNsToWeights[timeNs] = weights
+//        val timeNs = System.nanoTime() - startNs
+//        timeNsToWeights[timeNs] = weights
         val currentLoss = testLoss.loss(weights)
         if (currentLoss <= targetLoss) {
             stop.set(true)
@@ -38,6 +37,7 @@ inline fun measureIterations(
     }, 0, 100, TimeUnit.MILLISECONDS)
     iterations(stop)
     future.cancel(false)
+    scheduledThreadPool.shutdownNow()
     return timeNsToWeights
 }
 
@@ -177,7 +177,7 @@ class ClusterParallelSGDSolver(
         val shouldSync = clusters.size > 1
         val stop = stop
         val n = points.size
-        val random  = Random(threadId)
+        val random = Random(threadId)
         while (!stop.get()) {
             repeat(n) {
                 val i = random.nextInt(n)
