@@ -1,17 +1,20 @@
 package org.sgd
 
+import benchmark.Profiler
 import kotlinx.smartbench.benchmark.Benchmark
 import kotlinx.smartbench.benchmark.MeasurementMode
 import kotlinx.smartbench.benchmark.param
 import kotlinx.smartbench.benchmark.runBenchmark
 import kotlinx.smartbench.declarative.Operation
 import kotlinx.smartbench.graphic.PlotConfiguration
+import kotlinx.smartbench.graphic.Scaling
 import kotlinx.smartbench.graphic.ValueAxis
 import org.apache.batik.svggen.font.table.Table.name
 import org.junit.jupiter.api.Test
 import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 const val AVERAGE_LOSS_METRIC = "average loss"
 
@@ -94,11 +97,11 @@ class LinearRegressionTest {
             param(RunRegressionTask::method, "simple", "cluster")
             param(RunRegressionTask::learningRate, 0.5)
             param(RunRegressionTask::stepDecay, 0.8)
-            param(RunRegressionTask::targetLoss, 0.03)
-            param(RunRegressionTask::workingThreads, getInterestingThreads())
+            param(RunRegressionTask::targetLoss, 0.025)
+            param(RunRegressionTask::workingThreads, logSequence(Runtime.getRuntime().availableProcessors(), sqrt(2.0)))
             approximateBatchSize(10)
             measurementMode(MeasurementMode.AVERAGE_TIME, TimeUnit.SECONDS)
-//            attachProfiler(Profiler.LINUX_PEF_NORM_PROFILER)
+            attachProfiler(Profiler.LINUX_PEF_NORM_PROFILER)
         }.run {
             File("results").run {
                 mkdir()
@@ -107,25 +110,42 @@ class LinearRegressionTest {
             val configure: PlotConfiguration<RunRegressionTask>.(name: String) -> Unit = {
                 useErrorBars(true)
                 filename("results/$name.png")
+                xScaling(Scaling.LOGARITHMIC)
             }
 
             plot(xParameter = RunRegressionTask::workingThreads) {
                 configure("time")
             }
+            plot(xParameter = RunRegressionTask::workingThreads) {
+                configure("LLC_store_misses")
+                valueAxis(ValueAxis.LLC_store_misses)
+            }
+            plot(xParameter = RunRegressionTask::workingThreads) {
+                configure("LLC_stores")
+                valueAxis(ValueAxis.LLC_stores)
+            }
+            plot(xParameter = RunRegressionTask::workingThreads) {
+                configure("LLC_loads")
+                valueAxis(ValueAxis.LLC_loads)
+            }
+            plot(xParameter = RunRegressionTask::workingThreads) {
+                configure("LLC_load_misses")
+                valueAxis(ValueAxis.LLC_load_misses)
+            }
         }
     }
 }
 
-fun getInterestingThreads(): List<Int> {
-    val result = mutableListOf<Int>()
-    val numaNodes = numaConfig.mapValues { it.value.size }
-    for (i in numaNodes.keys.sorted()) {
-        val threads = numaNodes[i]!!
-        val last = result.lastOrNull() ?: 0
-        result.addAll(logSequence(threads).map { it + last })
-    }
-    return result
-}
+//fun getInterestingThreads(): List<Int> {
+//    val result = mutableListOf<Int>()
+//    val numaNodes = numaConfig.mapValues { it.value.size }
+//    for (i in numaNodes.keys.sorted()) {
+//        val threads = numaNodes[i]!!
+//        val last = result.lastOrNull() ?: 0
+//        result.addAll(logSequence(threads/*, sqrt(2.0)*/).map { it + last })
+//    }
+//    return result
+//}
 
 fun logSequence(maxValue: Int, step: Double = 2.0): List<Int> {
     var value = maxValue.toDouble()
