@@ -45,7 +45,7 @@ fun loadDataSet(file: File): DataSet {
             }
         }
     }
-    println("Dataset ${file.name} loaded in $timeMs ms")
+    println("Dataset ${file.name} loaded in ${timeMs / 1000} s")
     return DataSet(points)
 }
 

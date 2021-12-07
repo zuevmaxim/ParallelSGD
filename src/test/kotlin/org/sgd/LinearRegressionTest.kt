@@ -6,7 +6,6 @@ import kotlinx.smartbench.benchmark.param
 import kotlinx.smartbench.benchmark.runBenchmark
 import kotlinx.smartbench.declarative.Operation
 import kotlinx.smartbench.graphic.PlotConfiguration
-import kotlinx.smartbench.graphic.Scaling
 import kotlinx.smartbench.graphic.ValueAxis
 import org.apache.batik.svggen.font.table.Table.name
 import org.junit.jupiter.api.Test
@@ -76,14 +75,14 @@ class LinearRegressionTest {
     @Test
     fun sequentialSolver() {
         runBenchmark<SequentialRegressionTask> {
-            param(SequentialRegressionTask::learningRate, 0.06)
-            param(SequentialRegressionTask::stepDecay, 1.0)
-            param(SequentialRegressionTask::iterations, 100)
-            approximateBatchSize(10)
+            param(SequentialRegressionTask::learningRate, 0.5)
+            param(SequentialRegressionTask::stepDecay, 0.8)
+            param(SequentialRegressionTask::iterations, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+            approximateBatchSize(5)
             measurementMode(MeasurementMode.AVERAGE_TIME, TimeUnit.SECONDS)
             metric(AVERAGE_LOSS_METRIC) { loss.value / counter.value.toDouble() }
         }.run {
-            plot(xParameter = SequentialRegressionTask::learningRate) {
+            plot(xParameter = SequentialRegressionTask::iterations) {
                 valueAxis(ValueAxis.CustomMetric(AVERAGE_LOSS_METRIC))
             }
         }
@@ -93,11 +92,11 @@ class LinearRegressionTest {
     fun solverCompare() {
         runBenchmark<RunRegressionTask> {
             param(RunRegressionTask::method, "simple", "cluster")
-            param(RunRegressionTask::learningRate, 0.06)
-            param(RunRegressionTask::stepDecay, 1.0)
-            param(RunRegressionTask::targetLoss, 0.013)
-            param(RunRegressionTask::workingThreads, logSequence(Runtime.getRuntime().availableProcessors()))
-            approximateBatchSize(5)
+            param(RunRegressionTask::learningRate, 0.5)
+            param(RunRegressionTask::stepDecay, 0.8)
+            param(RunRegressionTask::targetLoss, 0.03)
+            param(RunRegressionTask::workingThreads, getInterestingThreads())
+            approximateBatchSize(10)
             measurementMode(MeasurementMode.AVERAGE_TIME, TimeUnit.SECONDS)
 //            attachProfiler(Profiler.LINUX_PEF_NORM_PROFILER)
         }.run {
@@ -107,35 +106,25 @@ class LinearRegressionTest {
             }
             val configure: PlotConfiguration<RunRegressionTask>.(name: String) -> Unit = {
                 useErrorBars(true)
-                yScaling(Scaling.LOGARITHMIC)
                 filename("results/$name.png")
             }
 
             plot(xParameter = RunRegressionTask::workingThreads) {
                 configure("time")
             }
-//                plot(xParameter = RunRegressionTask::workingThreads) {
-//                    useErrorBars(true)
-//                    valueAxis(ValueAxis.LLC_stores)
-//                    filename("results/LLC_stores.png")
-//                }
-//                plot(xParameter = RunRegressionTask::workingThreads) {
-//                    useErrorBars(true)
-//                    valueAxis(ValueAxis.LLC_loads)
-//                    filename("results/LLC_loads.png")
-//                }
-//                plot(xParameter = RunRegressionTask::workingThreads) {
-//                    useErrorBars(true)
-//                    valueAxis(ValueAxis.LLC_load_misses)
-//                    filename("results/LLC_load_misses.png")
-//                }
-//                plot(xParameter = RunRegressionTask::workingThreads) {
-//                    useErrorBars(true)
-//                    valueAxis(ValueAxis.LLC_store_misses)
-//                    filename("results/LLC_store_misses.png")
-//                }
         }
     }
+}
+
+fun getInterestingThreads(): List<Int> {
+    val result = mutableListOf<Int>()
+    val numaNodes = numaConfig.mapValues { it.value.size }
+    for (i in numaNodes.keys.sorted()) {
+        val threads = numaNodes[i]!!
+        val last = result.lastOrNull() ?: 0
+        result.addAll(logSequence(threads).map { it + last })
+    }
+    return result
 }
 
 fun logSequence(maxValue: Int, step: Double = 2.0): List<Int> {
