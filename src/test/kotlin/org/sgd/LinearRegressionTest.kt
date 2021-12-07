@@ -9,7 +9,6 @@ import kotlinx.smartbench.declarative.Operation
 import kotlinx.smartbench.graphic.PlotConfiguration
 import kotlinx.smartbench.graphic.Scaling
 import kotlinx.smartbench.graphic.ValueAxis
-import org.apache.batik.svggen.font.table.Table.name
 import org.junit.jupiter.api.Test
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -94,12 +93,12 @@ class LinearRegressionTest {
     @Test
     fun solverCompare() {
         runBenchmark<RunRegressionTask> {
-            param(RunRegressionTask::method, "simple", "cluster")
+            param(RunRegressionTask::method, "cluster")
             param(RunRegressionTask::learningRate, 0.5)
             param(RunRegressionTask::stepDecay, 0.8)
-            param(RunRegressionTask::targetLoss, 0.025)
+            param(RunRegressionTask::targetLoss, 0.022)
             param(RunRegressionTask::workingThreads, logSequence(Runtime.getRuntime().availableProcessors(), sqrt(2.0)))
-            approximateBatchSize(10)
+            approximateBatchSize(20)
             measurementMode(MeasurementMode.AVERAGE_TIME, TimeUnit.SECONDS)
             attachProfiler(Profiler.LINUX_PEF_NORM_PROFILER)
         }.run {
