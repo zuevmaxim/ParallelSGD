@@ -91,8 +91,9 @@ class ParallelSGDSolver(
         val stop = stop
         val n = points.size
         val random = Random(threadId)
-        while (!stop.get()) {
+        while (true) {
             repeat(n) {
+                if (stop.get()) return
                 val i = random.nextInt(n)
                 points[i].gradientStep(w, learningRate)
             }
@@ -178,8 +179,9 @@ class ClusterParallelSGDSolver(
         val stop = stop
         val n = points.size
         val random = Random(threadId)
-        while (!stop.get()) {
+        while (true) {
             repeat(n) {
+                if (stop.get()) return
                 val i = random.nextInt(n)
                 points[i].gradientStep(w, learningRate)
 
