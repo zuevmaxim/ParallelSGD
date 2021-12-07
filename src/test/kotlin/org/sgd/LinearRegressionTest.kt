@@ -96,7 +96,7 @@ class LinearRegressionTest {
             param(RunRegressionTask::method, "cluster")
             param(RunRegressionTask::learningRate, 0.5)
             param(RunRegressionTask::stepDecay, 0.8)
-            param(RunRegressionTask::targetLoss, 0.023)
+            param(RunRegressionTask::targetLoss, 0.025)
             param(RunRegressionTask::workingThreads, logSequence(Runtime.getRuntime().availableProcessors(), sqrt(2.0)))
             approximateBatchSize(20)
             measurementMode(MeasurementMode.AVERAGE_TIME, TimeUnit.SECONDS)
