@@ -107,8 +107,7 @@ class LinearRegressionTest {
                 mkdir()
                 println(absolutePath)
             }
-            val configure: PlotConfiguration<RunRegressionTask>.(name: String) -> Unit = {
-                useErrorBars(true)
+            fun PlotConfiguration<RunRegressionTask>.configure(name: String) {
                 filename("results/$name.png")
                 xScaling(Scaling.LOGARITHMIC)
             }
