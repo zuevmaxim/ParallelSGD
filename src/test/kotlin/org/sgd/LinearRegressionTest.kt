@@ -15,7 +15,8 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
-const val AVERAGE_LOSS_METRIC = "average loss"
+private const val AVERAGE_LOSS_METRIC = "average loss"
+private const val CLUSTER_METHOD_PREFIX = "cluster-"
 
 val baseDir =
     File("/home/maksim.zuev/datasets")
@@ -37,7 +38,7 @@ class RunRegressionTask(
     fun run(): LossValue {
         val solver = when {
             method == "simple" -> ParallelSGDSolver(learningRate, workingThreads, stepDecay)
-            method.startsWith("cluster") -> ClusterParallelSGDSolver(learningRate, workingThreads, stepDecay, method.substring("cluster".length).toInt())
+            method.startsWith(CLUSTER_METHOD_PREFIX) -> ClusterParallelSGDSolver(learningRate, workingThreads, stepDecay, method.substring(CLUSTER_METHOD_PREFIX.length).toInt())
             else -> error("Unknown method $method")
         }
         val result = solver.solve(trainLoss, testLoss, DoubleArray(features + 1), targetLoss)
@@ -93,10 +94,10 @@ class LinearRegressionTest {
     @Test
     fun solverCompare() {
         runBenchmark<RunRegressionTask> {
-            param(RunRegressionTask::method, logSequence(numaConfig.values.maxOf { it.size }).map { "cluster$it" })
+            param(RunRegressionTask::method, logSequence(numaConfig.values.maxOf { it.size }).map { "$CLUSTER_METHOD_PREFIX$it" })
             param(RunRegressionTask::learningRate, 0.5)
             param(RunRegressionTask::stepDecay, 0.8)
-            param(RunRegressionTask::targetLoss, 0.025)
+            param(RunRegressionTask::targetLoss, 0.024)
             param(RunRegressionTask::workingThreads, logSequence(Runtime.getRuntime().availableProcessors(), sqrt(2.0)))
             approximateBatchSize(20)
             measurementMode(MeasurementMode.AVERAGE_TIME, TimeUnit.SECONDS)
@@ -109,6 +110,7 @@ class LinearRegressionTest {
             fun PlotConfiguration<RunRegressionTask>.configure(name: String) {
                 filename("results/$name.png")
                 xScaling(Scaling.LOGARITHMIC)
+                useErrorBars(true)
             }
 
             plot(xParameter = RunRegressionTask::workingThreads) {
