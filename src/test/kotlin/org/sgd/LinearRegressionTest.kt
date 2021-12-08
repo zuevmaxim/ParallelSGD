@@ -99,7 +99,7 @@ class LinearRegressionTest {
             param(RunRegressionTask::stepDecay, 0.8)
             param(RunRegressionTask::targetLoss, 0.024)
             param(RunRegressionTask::workingThreads, logSequence(Runtime.getRuntime().availableProcessors(), sqrt(2.0)))
-            approximateBatchSize(20)
+            approximateBatchSize(100)
             measurementMode(MeasurementMode.AVERAGE_TIME, TimeUnit.SECONDS)
             attachProfiler(Profiler.LINUX_PEF_NORM_PROFILER)
         }.run {

@@ -91,11 +91,10 @@ class ParallelSGDSolver(
         var learningRate = alpha
         val stop = stop
         val n = points.size
-        val random = Random(threadId)
         while (true) {
             repeat(n) {
                 if (stop.get()) return
-                val i = random.nextInt(n)
+                val i = Random.nextInt(n)
                 points[i].gradientStep(w, learningRate)
             }
             learningRate *= stepDecay
@@ -186,7 +185,6 @@ class ClusterParallelSGDSolver(
         val shouldSync = clusters.size > 1
         val stop = stop
         val n = points.size
-        val random = Random(threadId)
         while (true) {
             repeat(n) {
                 if (stop.get()) {
@@ -195,7 +193,7 @@ class ClusterParallelSGDSolver(
                     }
                     return
                 }
-                val i = random.nextInt(n)
+                val i = Random.nextInt(n)
                 points[i].gradientStep(w, learningRate)
 
                 if (shouldSync) {
