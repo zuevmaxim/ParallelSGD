@@ -5,6 +5,7 @@ import java.lang.invoke.MethodHandles
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.min
 import kotlin.math.pow
 import kotlin.random.Random
 
@@ -112,6 +113,7 @@ class ClusterParallelSGDSolver(
     private val alpha: Double,
     private val threads: Int,
     private val stepDecay: Double,
+    threadsPerCluster: Int,
     private val stepsBeforeTokenPass: Int = 1000
 ) : SGDSolver {
     private val clusters: List<List<Int>>
@@ -119,12 +121,18 @@ class ClusterParallelSGDSolver(
 
     init {
         check(threads <= numaConfig.values.sumOf { it.size })
-        var cores = 0
-        clusters = numaConfig.filter { numaNode ->
-            (cores < threads).also {
-                cores += numaNode.value.size
+        var cores = threads
+        val clusters = mutableListOf<List<Int>>()
+        for (cpus in numaConfig.values) {
+            var size = cpus.size
+            while (cores > 0 && size >= min(threadsPerCluster, cores)) {
+                val portion = min(threadsPerCluster, cores)
+                cores -= portion
+                size -= portion
+                clusters.add(cpus.subList(size, size + portion).toList())
             }
-        }.values.toList()
+        }
+        this.clusters = clusters
     }
 
     private val AA = MethodHandles.arrayElementVarHandle(DoubleArray::class.java)
@@ -181,7 +189,12 @@ class ClusterParallelSGDSolver(
         val random = Random(threadId)
         while (true) {
             repeat(n) {
-                if (stop.get()) return
+                if (stop.get()) {
+                    if (locked) {
+                        releaseToken(clusterData, nextThreadId)
+                    }
+                    return
+                }
                 val i = random.nextInt(n)
                 points[i].gradientStep(w, learningRate)
 
@@ -205,9 +218,6 @@ class ClusterParallelSGDSolver(
                 }
             }
             learningRate *= stepDecay
-        }
-        if (locked) {
-            releaseToken(clusterData, nextThreadId)
         }
     }
 

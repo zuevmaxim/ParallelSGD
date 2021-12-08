@@ -35,9 +35,9 @@ class RunRegressionTask(
 
     @Operation
     fun run(): LossValue {
-        val solver = when (method) {
-            "simple" -> ParallelSGDSolver(learningRate, workingThreads, stepDecay)
-            "cluster" -> ClusterParallelSGDSolver(learningRate, workingThreads, stepDecay)
+        val solver = when {
+            method == "simple" -> ParallelSGDSolver(learningRate, workingThreads, stepDecay)
+            method.startsWith("cluster") -> ClusterParallelSGDSolver(learningRate, workingThreads, stepDecay, method.substring("cluster".length).toInt())
             else -> error("Unknown method $method")
         }
         val result = solver.solve(trainLoss, testLoss, DoubleArray(features + 1), targetLoss)
@@ -93,7 +93,7 @@ class LinearRegressionTest {
     @Test
     fun solverCompare() {
         runBenchmark<RunRegressionTask> {
-            param(RunRegressionTask::method, "cluster")
+            param(RunRegressionTask::method, logSequence(numaConfig.values.maxOf { it.size }).map { "cluster$it" })
             param(RunRegressionTask::learningRate, 0.5)
             param(RunRegressionTask::stepDecay, 0.8)
             param(RunRegressionTask::targetLoss, 0.025)
