@@ -13,6 +13,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 private const val AVERAGE_LOSS_METRIC = "average loss"
+private const val SPEEDUP_METRIC = "speedup"
 private const val CLUSTER_METHOD_PREFIX = "cluster-"
 
 val baseDir =
@@ -93,19 +94,21 @@ class LinearRegressionTest {
     fun run() {
         val trainLoss = LinearRegressionLoss(train)
         val testLoss = LinearRegressionLoss(test)
-        val solver = ClusterParallelSGDSolver(0.5f, 128, 0.8f, 32)
-        val result = solver.solve(trainLoss, testLoss, TypeArray(features + 1), 0.028f)
+        val solver = ClusterParallelSGDSolver(0.5.toType(), 128, 0.8.toType(), 32)
+        val result = solver.solve(trainLoss, testLoss, TypeArray(features + 1), 0.028.toType())
         testLoss.loss(result.w)
     }
 
     @Test
     fun solverCompare() {
+        val threadsPerCluster = logSequence(numaConfig.values.maxOf { it.size }).map { "$CLUSTER_METHOD_PREFIX$it" }
+        val threads = logSequence(Runtime.getRuntime().availableProcessors(), sqrt(2.0))
         runBenchmark<RunRegressionTask> {
-            param(RunRegressionTask::method, logSequence(numaConfig.values.maxOf { it.size }).map { "$CLUSTER_METHOD_PREFIX$it" })
-            param(RunRegressionTask::learningRate, 0.5f)
-            param(RunRegressionTask::stepDecay, 0.8f)
-            param(RunRegressionTask::targetLoss, 0.025f)
-            param(RunRegressionTask::workingThreads, logSequence(Runtime.getRuntime().availableProcessors(), sqrt(2.0)))
+            param(RunRegressionTask::method, threadsPerCluster)
+            param(RunRegressionTask::learningRate, 0.5.toType())
+            param(RunRegressionTask::stepDecay, 0.8.toType())
+            param(RunRegressionTask::targetLoss, 0.025.toType())
+            param(RunRegressionTask::workingThreads, threads)
             approximateBatchSize(30)
             measurementMode(MeasurementMode.AVERAGE_TIME, TimeUnit.SECONDS)
             attachProfiler(Profiler.LINUX_PEF_NORM_PROFILER)
@@ -138,6 +141,22 @@ class LinearRegressionTest {
             plot(xParameter = RunRegressionTask::workingThreads) {
                 configure("LLC_load_misses")
                 valueAxis(ValueAxis.LLC_load_misses)
+            }
+            plot(xParameter = RunRegressionTask::workingThreads) {
+                for (p: String in threadsPerCluster) {
+                    val oneThreadTime = iterationResults.entries.single {
+                        val params = it.key.params
+                        params[RunRegressionTask::method.name]!!.param == p &&
+                            params[RunRegressionTask::workingThreads.name]!!.param == 1
+                    }.value.resultValue(benchmarkConfiguration)
+                    iterationResults.entries.filter {
+                        it.key.params[RunRegressionTask::method.name]!!.param == p
+                    }.forEach {
+                        it.value.metrics[SPEEDUP_METRIC] = it.value.resultValue(benchmarkConfiguration) / oneThreadTime
+                    }
+                }
+                configure(SPEEDUP_METRIC)
+                valueAxis(ValueAxis.CustomMetric(SPEEDUP_METRIC))
             }
         }
     }
