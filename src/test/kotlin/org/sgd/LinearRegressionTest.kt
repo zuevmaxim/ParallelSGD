@@ -10,7 +10,6 @@ import org.junit.jupiter.api.Test
 import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
-import kotlin.math.sqrt
 
 private const val AVERAGE_LOSS_METRIC = "average loss"
 private const val SPEEDUP_METRIC = "speedup"
@@ -100,7 +99,40 @@ class LinearRegressionTest {
     }
 
     @Test
-    fun solverCompare() {
+    fun solverCompareWithProfiler() = solverCompareTest({
+        attachProfiler(Profiler.LINUX_PEF_NORM_PROFILER)
+    }) {
+        plot(xParameter = RunRegressionTask::workingThreads) {
+            configure("LLC_store_misses")
+            valueAxis(ValueAxis.LLC_store_misses)
+        }
+        plot(xParameter = RunRegressionTask::workingThreads) {
+            configure("LLC_stores")
+            valueAxis(ValueAxis.LLC_stores)
+        }
+        plot(xParameter = RunRegressionTask::workingThreads) {
+            configure("LLC_loads")
+            valueAxis(ValueAxis.LLC_loads)
+        }
+        plot(xParameter = RunRegressionTask::workingThreads) {
+            configure("LLC_load_misses")
+            valueAxis(ValueAxis.LLC_load_misses)
+        }
+    }
+
+    private fun PlotConfiguration<RunRegressionTask>.configure(name: String) {
+        filename("results/$name.png")
+        xScaling(Scaling.LOGARITHMIC)
+        useErrorBars(true)
+    }
+
+    @Test
+    fun solverCompare() = solverCompareTest()
+
+    private fun solverCompareTest(
+        configureBenchmark: BenchmarkConfiguration<RunRegressionTask>.() -> Unit = {},
+        plotExtra: BenchmarkResults<RunRegressionTask>.() -> Unit = {}
+    ) {
         val threadsPerCluster = logSequence(numaConfig.values.maxOf { it.size }).map { "$CLUSTER_METHOD_PREFIX$it" }
         val threads = logSequence(Runtime.getRuntime().availableProcessors())
         runBenchmark<RunRegressionTask> {
@@ -111,36 +143,15 @@ class LinearRegressionTest {
             param(RunRegressionTask::workingThreads, threads)
             approximateBatchSize(30)
             measurementMode(MeasurementMode.AVERAGE_TIME, TimeUnit.SECONDS)
-            attachProfiler(Profiler.LINUX_PEF_NORM_PROFILER)
+            configureBenchmark()
         }.run {
             File("results").run {
                 mkdir()
                 println(absolutePath)
             }
-            fun PlotConfiguration<RunRegressionTask>.configure(name: String) {
-                filename("results/$name.png")
-                xScaling(Scaling.LOGARITHMIC)
-                useErrorBars(true)
-            }
 
             plot(xParameter = RunRegressionTask::workingThreads) {
                 configure("time")
-            }
-            plot(xParameter = RunRegressionTask::workingThreads) {
-                configure("LLC_store_misses")
-                valueAxis(ValueAxis.LLC_store_misses)
-            }
-            plot(xParameter = RunRegressionTask::workingThreads) {
-                configure("LLC_stores")
-                valueAxis(ValueAxis.LLC_stores)
-            }
-            plot(xParameter = RunRegressionTask::workingThreads) {
-                configure("LLC_loads")
-                valueAxis(ValueAxis.LLC_loads)
-            }
-            plot(xParameter = RunRegressionTask::workingThreads) {
-                configure("LLC_load_misses")
-                valueAxis(ValueAxis.LLC_load_misses)
             }
             plot(xParameter = RunRegressionTask::workingThreads) {
                 for (p: String in threadsPerCluster) {
@@ -158,6 +169,7 @@ class LinearRegressionTest {
                 configure(SPEEDUP_METRIC)
                 valueAxis(ValueAxis.CustomMetric(SPEEDUP_METRIC))
             }
+            plotExtra()
         }
     }
 }
