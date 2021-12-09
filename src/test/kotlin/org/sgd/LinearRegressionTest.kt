@@ -95,14 +95,14 @@ class LinearRegressionTest {
         val trainLoss = LinearRegressionLoss(train)
         val testLoss = LinearRegressionLoss(test)
         val solver = ClusterParallelSGDSolver(0.5.toType(), 128, 0.8.toType(), 32)
-        val result = solver.solve(trainLoss, testLoss, TypeArray(features + 1), 0.028.toType())
-        testLoss.loss(result.w)
+        val result = solver.solve(trainLoss, testLoss, TypeArray(features + 1), 0.025.toType())
+        println(testLoss.loss(result.w))
     }
 
     @Test
     fun solverCompare() {
         val threadsPerCluster = logSequence(numaConfig.values.maxOf { it.size }).map { "$CLUSTER_METHOD_PREFIX$it" }
-        val threads = logSequence(Runtime.getRuntime().availableProcessors(), sqrt(2.0))
+        val threads = logSequence(Runtime.getRuntime().availableProcessors())
         runBenchmark<RunRegressionTask> {
             param(RunRegressionTask::method, threadsPerCluster)
             param(RunRegressionTask::learningRate, 0.5.toType())
