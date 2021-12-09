@@ -6,14 +6,14 @@ import kotlin.math.pow
 class LinearRegressionLoss(private val dataSet: DataSet) : DataSetLoss(dataSet) {
     override fun pointLoss(p: DataPoint) = LinearRegressionPointLoss(p)
 
-    fun precision(w: Weights): Pair<Double, Double> {
+    fun precision(w: TypeArray): Pair<Double, Double> {
         var truePositive = 0
         var falsePositive = 0
         var trueNegative = 0
         var falseNegative = 0
         for (point in dataSet.points) {
-            val prediction = if (dot(w, point) >= 0) 1.0 else 0.0
-            if (prediction == 1.0) {
+            val prediction = if (dot(w, point.indices, point.xValues) >= ZERO) ONE else ZERO
+            if (prediction == ONE) {
                 if (prediction == point.y) truePositive++ else falsePositive++
             } else {
                 if (prediction == point.y) trueNegative++ else falseNegative++
@@ -24,12 +24,12 @@ class LinearRegressionLoss(private val dataSet: DataSet) : DataSetLoss(dataSet) 
 }
 
 class LinearRegressionPointLoss(private val p: DataPoint) : DataPointLoss {
-    override fun loss(w: Weights) = (p.y - if (dot(w, p) >= 0.0) 1.0 else 0.0).pow(2)
+    override fun loss(w: TypeArray): Type = (p.y - if (dot(w, p.indices, p.xValues) >= ZERO) ONE else ZERO).pow(2)
 
-    override fun gradientStep(w: Weights, learningRate: Double) {
+    override fun gradientStep(w: TypeArray, learningRate: Type) {
         val indices = p.indices
         val xs = p.xValues
-        val e = exp(-dot(w, p))
+        val e = exp(-dot(w, indices, xs))
         val grad = learningRate * (1 / (1 + e) - p.y)
         repeat(indices.size) { i ->
             w[indices[i]] -= xs[i] * grad
@@ -38,11 +38,8 @@ class LinearRegressionPointLoss(private val p: DataPoint) : DataPointLoss {
     }
 }
 
-private fun dot(w: Weights, p: DataPoint): Double {
-    var s = 0.0
-    s += w[w.size - 1]
-    val indices = p.indices
-    val xs = p.xValues
+private fun dot(w: TypeArray, indices: IntArray, xs: TypeArray): Type {
+    var s = w[w.size - 1]
     repeat(indices.size) { i ->
         s += xs[i] * w[indices[i]]
     }

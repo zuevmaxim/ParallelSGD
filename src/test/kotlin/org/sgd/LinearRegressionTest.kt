@@ -1,10 +1,7 @@
 package org.sgd
 
 import benchmark.Profiler
-import kotlinx.smartbench.benchmark.Benchmark
-import kotlinx.smartbench.benchmark.MeasurementMode
-import kotlinx.smartbench.benchmark.param
-import kotlinx.smartbench.benchmark.runBenchmark
+import kotlinx.smartbench.benchmark.*
 import kotlinx.smartbench.declarative.Operation
 import kotlinx.smartbench.graphic.PlotConfiguration
 import kotlinx.smartbench.graphic.Scaling
@@ -29,25 +26,25 @@ val test by lazy { loadDataSet(File(baseDir, "$DATASET.t")) }
 val features by lazy { test.points.asSequence().plus(train.points).maxOf { it.indices.maxOrNull() ?: 0 } }
 
 class RunRegressionTask(
-    val method: String, val learningRate: Double, val stepDecay: Double, val workingThreads: Int, val targetLoss: Double
+    val method: String, val learningRate: Type, val stepDecay: Type, val workingThreads: Int, val targetLoss: Type
 ) : Benchmark() {
     private val trainLoss = LinearRegressionLoss(train)
     private val testLoss = LinearRegressionLoss(test)
 
     @Operation
-    fun run(): LossValue {
+    fun run(): Type {
         val solver = when {
             method == "simple" -> ParallelSGDSolver(learningRate, workingThreads, stepDecay)
             method.startsWith(CLUSTER_METHOD_PREFIX) -> ClusterParallelSGDSolver(learningRate, workingThreads, stepDecay, method.substring(CLUSTER_METHOD_PREFIX.length).toInt())
             else -> error("Unknown method $method")
         }
-        val result = solver.solve(trainLoss, testLoss, DoubleArray(features + 1), targetLoss)
+        val result = solver.solve(trainLoss, testLoss, TypeArray(features + 1), targetLoss)
         return testLoss.loss(result.w)
     }
 }
 
 class SequentialRegressionTask(
-    val learningRate: Double, val stepDecay: Double, val iterations: Int
+    val learningRate: Type, val stepDecay: Type, val iterations: Int
 ) : Benchmark() {
     val trainLoss = LinearRegressionLoss(train)
     val testLoss = LinearRegressionLoss(test)
@@ -55,9 +52,9 @@ class SequentialRegressionTask(
     val counter = BenchmarkCounter()
 
     @Operation
-    fun run(): LossValue {
+    fun run(): Type {
         val solver = SequentialSGDSolver(iterations, learningRate, stepDecay)
-        val result = solver.solve(trainLoss, testLoss, DoubleArray(features + 1), 0.0)
+        val result = solver.solve(trainLoss, testLoss, TypeArray(features + 1), ZERO)
         return testLoss.loss(result.w).also {
             val scale = 1e3.toLong()
             loss.inc((it * scale).toLong())
@@ -81,9 +78,10 @@ class LinearRegressionTest {
             param(SequentialRegressionTask::learningRate, 0.5)
             param(SequentialRegressionTask::stepDecay, 0.8)
             param(SequentialRegressionTask::iterations, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
-            approximateBatchSize(5)
+            approximateBatchSize(10)
             measurementMode(MeasurementMode.AVERAGE_TIME, TimeUnit.SECONDS)
             metric(AVERAGE_LOSS_METRIC) { loss.value / counter.value.toDouble() }
+            benchmarkMode(BenchmarkMode.INPLACE)
         }.run {
             plot(xParameter = SequentialRegressionTask::iterations) {
                 valueAxis(ValueAxis.CustomMetric(AVERAGE_LOSS_METRIC))
@@ -92,14 +90,23 @@ class LinearRegressionTest {
     }
 
     @Test
+    fun run() {
+        val trainLoss = LinearRegressionLoss(train)
+        val testLoss = LinearRegressionLoss(test)
+        val solver = ClusterParallelSGDSolver(0.5f, 128, 0.8f, 32)
+        val result = solver.solve(trainLoss, testLoss, TypeArray(features + 1), 0.028f)
+        testLoss.loss(result.w)
+    }
+
+    @Test
     fun solverCompare() {
         runBenchmark<RunRegressionTask> {
-            param(RunRegressionTask::method, logSequence(numaConfig.values.maxOf { it.size }).map { "$CLUSTER_METHOD_PREFIX$it" })
-            param(RunRegressionTask::learningRate, 0.5)
-            param(RunRegressionTask::stepDecay, 0.8)
-            param(RunRegressionTask::targetLoss, 0.025)
+            param(RunRegressionTask::method, "${CLUSTER_METHOD_PREFIX}32")//logSequence(numaConfig.values.maxOf { it.size }).map { "$CLUSTER_METHOD_PREFIX$it" })
+            param(RunRegressionTask::learningRate, 0.5f)
+            param(RunRegressionTask::stepDecay, 0.8f)
+            param(RunRegressionTask::targetLoss, 0.025f)
             param(RunRegressionTask::workingThreads, logSequence(Runtime.getRuntime().availableProcessors(), sqrt(2.0)))
-            approximateBatchSize(100)
+            approximateBatchSize(10)
             measurementMode(MeasurementMode.AVERAGE_TIME, TimeUnit.SECONDS)
             attachProfiler(Profiler.LINUX_PEF_NORM_PROFILER)
         }.run {

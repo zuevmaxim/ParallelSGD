@@ -10,21 +10,21 @@ import kotlin.math.pow
 import kotlin.random.Random
 
 
-class SGDResult(val w: Weights, val timeNsToWeights: LinkedHashMap<Long, Weights>)
+class SGDResult(val w: TypeArray, val timeNsToWeights: LinkedHashMap<Long, TypeArray>)
 
 interface SGDSolver {
-    fun solve(loss: DataSetLoss, testLoss: DataSetLoss, initial: Weights, targetLoss: LossValue): SGDResult
+    fun solve(loss: DataSetLoss, testLoss: DataSetLoss, initial: TypeArray, targetLoss: Type): SGDResult
 }
 
 
 inline fun measureIterations(
     testLoss: DataSetLoss,
-    targetLoss: LossValue,
-    crossinline accessWeights: () -> Weights,
+    targetLoss: Type,
+    crossinline accessWeights: () -> TypeArray,
     iterations: (AtomicBoolean) -> Unit
-): LinkedHashMap<Long, Weights> {
+): LinkedHashMap<Long, TypeArray> {
     val stop = AtomicBoolean(false)
-    val timeNsToWeights = linkedMapOf<Long, Weights>()
+    val timeNsToWeights = linkedMapOf<Long, TypeArray>()
 //    val startNs = System.nanoTime()
     val scheduledThreadPool = Executors.newScheduledThreadPool(1)
     val future = scheduledThreadPool.scheduleAtFixedRate({
@@ -35,7 +35,7 @@ inline fun measureIterations(
         if (currentLoss <= targetLoss) {
             stop.set(true)
         }
-    }, 0, 100, TimeUnit.MILLISECONDS)
+    }, 0, 1000, TimeUnit.MILLISECONDS)
     iterations(stop)
     future.cancel(false)
     scheduledThreadPool.shutdownNow()
@@ -44,10 +44,10 @@ inline fun measureIterations(
 
 class SequentialSGDSolver(
     private val iterations: Int,
-    private val alpha: Double,
-    private val stepDecay: Double
+    private val alpha: Type,
+    private val stepDecay: Type
 ) : SGDSolver {
-    override fun solve(loss: DataSetLoss, testLoss: DataSetLoss, initial: Weights, targetLoss: LossValue): SGDResult {
+    override fun solve(loss: DataSetLoss, testLoss: DataSetLoss, initial: TypeArray, targetLoss: Type): SGDResult {
         val w = initial
         val fs = loss.pointLoss
         val random = Random
@@ -67,13 +67,13 @@ class SequentialSGDSolver(
 }
 
 class ParallelSGDSolver(
-    private val alpha: Double,
+    private val alpha: Type,
     private val threads: Int,
-    private val stepDecay: Double
+    private val stepDecay: Type
 ) : SGDSolver {
     private lateinit var stop: AtomicBoolean
 
-    override fun solve(loss: DataSetLoss, testLoss: DataSetLoss, initial: Weights, targetLoss: LossValue): SGDResult {
+    override fun solve(loss: DataSetLoss, testLoss: DataSetLoss, initial: TypeArray, targetLoss: Type): SGDResult {
         val tasks = numaConfig.values.flatten().take(threads).map { threadId -> Thread { threadSolve(initial, threadId, loss) } }
         val timeToLoss = measureIterations(testLoss, targetLoss, { initial.copyOf() }) {
             stop = it
@@ -85,7 +85,7 @@ class ParallelSGDSolver(
         return SGDResult(initial, timeToLoss)
     }
 
-    private fun threadSolve(w: Weights, threadId: Int, loss: DataSetLoss) {
+    private fun threadSolve(w: TypeArray, threadId: Int, loss: DataSetLoss) {
         bindCurrentThreadToCpu(threadId)
         val points = loss.pointLoss
         var learningRate = alpha
@@ -103,15 +103,15 @@ class ParallelSGDSolver(
 }
 
 
-private class ClusterData(val w: Weights, val wPrev: Weights, val clusterId: Int) {
+private class ClusterData(val w: TypeArray, val wPrev: TypeArray, val clusterId: Int) {
     @Volatile
     var nextThread: Int = 0
 }
 
 class ClusterParallelSGDSolver(
-    private val alpha: Double,
+    private val alpha: Type,
     private val threads: Int,
-    private val stepDecay: Double,
+    private val stepDecay: Type,
     threadsPerCluster: Int,
     private val stepsBeforeTokenPass: Int = 1000
 ) : SGDSolver {
@@ -134,16 +134,18 @@ class ClusterParallelSGDSolver(
         this.clusters = clusters
     }
 
-    private val AA = MethodHandles.arrayElementVarHandle(DoubleArray::class.java)
-    private val beta = findRoot { x -> x.pow(clusters.size) + x - 1.0 }
+    private val AA = MethodHandles.arrayElementVarHandle(TypeArray::class.java)
+    private val beta = findRoot { x -> x.pow(clusters.size) + x - 1.0 }.toType()
     private val lambda = 1 - beta.pow(clusters.size - 1)
     private val token = atomic(0)
+    private lateinit var test: DataSetLoss
 
     @Volatile
     private lateinit var clustersData: List<ClusterData>
 
-    override fun solve(loss: DataSetLoss, testLoss: DataSetLoss, initial: Weights, targetLoss: LossValue): SGDResult {
+    override fun solve(loss: DataSetLoss, testLoss: DataSetLoss, initial: TypeArray, targetLoss: Type): SGDResult {
         clustersData = clusters.indices.map { i -> ClusterData(initial.copyOf(), initial.copyOf(), i) }
+        test = testLoss
 
         var activeCores = 0
         val tasks = clusters.withIndex().flatMap { (clusterId, cores) ->
@@ -152,7 +154,7 @@ class ClusterParallelSGDSolver(
                 .map { i -> Thread { threadSolve(clustersData[clusterId], cores[i], cores[(i + 1) % cores.size], loss) } }
                 .also { activeCores += it.size }
         }
-        val timeToLoss = measureIterations(testLoss, targetLoss, { getResults(DoubleArray(initial.size)) }) {
+        val timeToLoss = measureIterations(testLoss, targetLoss, { getResults(TypeArray(initial.size)) }) {
             stop = it
             tasks
                 .onEach { it.start() }
@@ -162,7 +164,7 @@ class ClusterParallelSGDSolver(
         return SGDResult(getResults(initial), timeToLoss)
     }
 
-    private fun getResults(buffer: Weights): Weights {
+    private fun getResults(buffer: TypeArray): TypeArray {
         if (clustersData.size == 1) {
             return clustersData[0].w.copyInto(buffer)
         }
@@ -170,7 +172,7 @@ class ClusterParallelSGDSolver(
         for (data in clustersData) {
             buffer.add(data.w)
         }
-        buffer.divide(clusters.size.toDouble())
+        buffer.divide(clusters.size.toType())
         return buffer
     }
 
@@ -185,6 +187,7 @@ class ClusterParallelSGDSolver(
         val shouldSync = clusters.size > 1
         val stop = stop
         val n = points.size
+        val stepsBeforeTokenPass = stepsBeforeTokenPass
         while (true) {
             repeat(n) {
                 if (stop.get()) {
@@ -226,7 +229,7 @@ class ClusterParallelSGDSolver(
         val wPrev = clusterData.wPrev
         repeat(w.size) { i ->
             val delta = w[i] - wPrev[i]
-            val nextValue = AA.getAndAdd(clustersData[next].w, i, beta * delta) as Double
+            val nextValue = AA.getAndAdd(clustersData[next].w, i, beta * delta) as Type
             wPrev[i] = lambda * nextValue + (1 - lambda) * wPrev[i] + beta * delta
         }
     }
