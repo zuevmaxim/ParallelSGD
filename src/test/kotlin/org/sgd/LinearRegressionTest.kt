@@ -97,7 +97,7 @@ class LinearRegressionTest {
             param(RunRegressionTask::method, logSequence(numaConfig.values.maxOf { it.size }).map { "$CLUSTER_METHOD_PREFIX$it" })
             param(RunRegressionTask::learningRate, 0.5)
             param(RunRegressionTask::stepDecay, 0.8)
-            param(RunRegressionTask::targetLoss, 0.024)
+            param(RunRegressionTask::targetLoss, 0.025)
             param(RunRegressionTask::workingThreads, logSequence(Runtime.getRuntime().availableProcessors(), sqrt(2.0)))
             approximateBatchSize(100)
             measurementMode(MeasurementMode.AVERAGE_TIME, TimeUnit.SECONDS)
