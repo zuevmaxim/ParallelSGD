@@ -101,12 +101,12 @@ class LinearRegressionTest {
     @Test
     fun solverCompare() {
         runBenchmark<RunRegressionTask> {
-            param(RunRegressionTask::method, "${CLUSTER_METHOD_PREFIX}32")//logSequence(numaConfig.values.maxOf { it.size }).map { "$CLUSTER_METHOD_PREFIX$it" })
+            param(RunRegressionTask::method, logSequence(numaConfig.values.maxOf { it.size }).map { "$CLUSTER_METHOD_PREFIX$it" })
             param(RunRegressionTask::learningRate, 0.5f)
             param(RunRegressionTask::stepDecay, 0.8f)
             param(RunRegressionTask::targetLoss, 0.025f)
             param(RunRegressionTask::workingThreads, logSequence(Runtime.getRuntime().availableProcessors(), sqrt(2.0)))
-            approximateBatchSize(10)
+            approximateBatchSize(30)
             measurementMode(MeasurementMode.AVERAGE_TIME, TimeUnit.SECONDS)
             attachProfiler(Profiler.LINUX_PEF_NORM_PROFILER)
         }.run {
