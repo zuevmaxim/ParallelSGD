@@ -53,8 +53,14 @@ fun loadDataSet(file: File): DataSet {
             lines.forEach { line ->
                 val parts = line.trim().split(" ")
                 val y = if (parts[0].toInt() == 1) ONE else ZERO
-                val (indices, values) = parts.drop(1).map { val (id, count) = it.split(':'); id.toInt() to count.toWorkingType() }.unzip()
-                points.add(DataPoint(indices.toIntArray(), values.toArray(), y))
+                val indices = IntArray(parts.size - 1)
+                val values = TypeArray(parts.size - 1)
+                repeat(parts.size - 1) { index ->
+                    val (id, value) = parts[index + 1].split(':')
+                    indices[index] = id.toInt()
+                    values[index] = value.toWorkingType()
+                }
+                points.add(DataPoint(indices, values, y))
             }
         }
     }
