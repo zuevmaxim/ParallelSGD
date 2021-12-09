@@ -108,9 +108,24 @@ private class ClusterData(val w: TypeArray, val wPrev: TypeArray, val clusterId:
     var nextThread: Int = 0
 }
 
+fun extractClusters(threads: Int, threadsPerCluster: Int): MutableList<List<Int>> {
+    val clusters = mutableListOf<List<Int>>()
+    var cores = threads
+    for (cpus in numaConfig.values) {
+        var i = 0
+        while (cores > 0 && i + min(threadsPerCluster, cores) <= cpus.size) {
+            val portion = min(threadsPerCluster, cores)
+            cores -= portion
+            clusters.add(cpus.subList(i, i + portion).toList())
+            i += portion
+        }
+    }
+    return clusters
+}
+
 class ClusterParallelSGDSolver(
     private val alpha: Type,
-    private val threads: Int,
+    threads: Int,
     private val stepDecay: Type,
     threadsPerCluster: Int,
     private val stepsBeforeTokenPass: Int = 1000
@@ -120,17 +135,7 @@ class ClusterParallelSGDSolver(
 
     init {
         check(threads <= numaConfig.values.sumOf { it.size })
-        var cores = threads
-        val clusters = mutableListOf<List<Int>>()
-        for (cpus in numaConfig.values) {
-            var size = cpus.size
-            while (cores > 0 && size >= min(threadsPerCluster, cores)) {
-                val portion = min(threadsPerCluster, cores)
-                cores -= portion
-                size -= portion
-                clusters.add(cpus.subList(size, size + portion).toList())
-            }
-        }
+        val clusters = extractClusters(threads, threadsPerCluster)
         this.clusters = clusters
     }
 
@@ -147,12 +152,9 @@ class ClusterParallelSGDSolver(
         clustersData = clusters.indices.map { i -> ClusterData(initial.copyOf(), initial.copyOf(), i) }
         test = testLoss
 
-        var activeCores = 0
         val tasks = clusters.withIndex().flatMap { (clusterId, cores) ->
             cores.indices
-                .take(threads - activeCores)
                 .map { i -> Thread { threadSolve(clustersData[clusterId], cores[i], cores[(i + 1) % cores.size], loss) } }
-                .also { activeCores += it.size }
         }
         val timeToLoss = measureIterations(testLoss, targetLoss, { getResults(TypeArray(initial.size)) }) {
             stop = it

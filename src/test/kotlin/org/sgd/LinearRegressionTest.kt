@@ -15,11 +15,12 @@ private const val AVERAGE_LOSS_METRIC = "average loss"
 private const val SPEEDUP_METRIC = "speedup"
 private const val CLUSTER_METHOD_PREFIX = "cluster-"
 
-val baseDir =
-    File("/home/maksim.zuev/datasets")
-//    File(".")
-
 const val DATASET = "rcv1"
+
+val baseDir = File(".").let {
+    if (File(it, DATASET).exists()) it
+    else File("/home/maksim.zuev/datasets")
+}
 
 val train by lazy { loadDataSet(File(baseDir, DATASET)) }
 val test by lazy { loadDataSet(File(baseDir, "$DATASET.t")) }
