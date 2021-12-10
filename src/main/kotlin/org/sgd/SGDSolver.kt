@@ -35,7 +35,7 @@ inline fun measureIterations(
         if (currentLoss <= targetLoss) {
             stop.set(true)
         }
-    }, 0, 1000, TimeUnit.MILLISECONDS)
+    }, 0, 100, TimeUnit.MILLISECONDS)
     iterations(stop)
     future.cancel(false)
     scheduledThreadPool.shutdownNow()
