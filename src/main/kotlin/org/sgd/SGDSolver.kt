@@ -128,7 +128,7 @@ class ClusterParallelSGDSolver(
     threads: Int,
     private val stepDecay: Type,
     threadsPerCluster: Int,
-    private val stepsBeforeTokenPass: Int = 1000
+    private val stepsBeforeTokenPass: Int = 10000
 ) : SGDSolver {
     private val clusters: List<List<Int>>
     private lateinit var stop: AtomicBoolean

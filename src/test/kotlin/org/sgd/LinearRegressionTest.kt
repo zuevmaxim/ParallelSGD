@@ -164,7 +164,7 @@ class LinearRegressionTest {
                     iterationResults.entries.filter {
                         it.key.params[RunRegressionTask::method.name]!!.param == p
                     }.forEach {
-                        it.value.metrics[SPEEDUP_METRIC] = it.value.resultValue(benchmarkConfiguration) / oneThreadTime
+                        it.value.metrics[SPEEDUP_METRIC] = oneThreadTime / it.value.resultValue(benchmarkConfiguration)
                     }
                 }
                 configure(SPEEDUP_METRIC)
