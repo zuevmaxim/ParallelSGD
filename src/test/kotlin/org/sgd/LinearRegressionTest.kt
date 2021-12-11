@@ -134,23 +134,22 @@ class LinearRegressionTest {
         configureBenchmark: BenchmarkConfiguration<RunRegressionTask>.() -> Unit = {},
         plotExtra: BenchmarkResults<RunRegressionTask>.() -> Unit = {}
     ) {
-        File("results").run {
-            mkdir()
-            println(absolutePath)
-        }
         val threadsPerCluster = logSequence(numaConfig.values.maxOf { it.size }).map { "$CLUSTER_METHOD_PREFIX$it" }
         val threads = logSequence(Runtime.getRuntime().availableProcessors())
         runBenchmark<RunRegressionTask> {
             param(RunRegressionTask::method, threadsPerCluster)
             param(RunRegressionTask::learningRate, 0.5.toType())
             param(RunRegressionTask::stepDecay, 0.8.toType())
-            param(RunRegressionTask::targetLoss, 0.023.toType())
+            param(RunRegressionTask::targetLoss, 0.024.toType())
             param(RunRegressionTask::workingThreads, threads)
             approximateBatchSize(30)
             measurementMode(MeasurementMode.AVERAGE_TIME, TimeUnit.SECONDS)
             configureBenchmark()
-            output("results/results.csv")
         }.run {
+            File("results").run {
+                mkdir()
+                println(absolutePath)
+            }
 
             plot(xParameter = RunRegressionTask::workingThreads) {
                 configure("time")
