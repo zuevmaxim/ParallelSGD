@@ -1,30 +1,14 @@
 package org.sgd
 
+import kotlin.math.abs
 import kotlin.math.exp
-import kotlin.math.pow
 
-class LinearRegressionLoss(private val dataSet: DataSet) : DataSetLoss(dataSet) {
+class LinearRegressionLoss : Loss {
     override fun pointLoss(p: DataPoint) = LinearRegressionPointLoss(p)
-
-    fun precision(w: TypeArray): Pair<Double, Double> {
-        var truePositive = 0
-        var falsePositive = 0
-        var trueNegative = 0
-        var falseNegative = 0
-        for (point in dataSet.points) {
-            val prediction = if (dot(w, point.indices, point.xValues) >= ZERO) ONE else ZERO
-            if (prediction == ONE) {
-                if (prediction == point.y) truePositive++ else falsePositive++
-            } else {
-                if (prediction == point.y) trueNegative++ else falseNegative++
-            }
-        }
-        return truePositive.toDouble() / (truePositive + falseNegative) to trueNegative.toDouble() / (trueNegative + falsePositive)
-    }
 }
 
 class LinearRegressionPointLoss(private val p: DataPoint) : DataPointLoss {
-    override fun loss(w: TypeArray): Type = (p.y - if (dot(w, p.indices, p.xValues) >= ZERO) ONE else ZERO).pow(2)
+    override fun loss(w: TypeArray): Type = abs(p.y - predict(w, p.indices, p.xValues))
 
     override fun gradientStep(w: TypeArray, learningRate: Type) {
         val indices = p.indices
@@ -36,6 +20,9 @@ class LinearRegressionPointLoss(private val p: DataPoint) : DataPointLoss {
         }
         w[w.size - 1] -= grad
     }
+
+    override fun predict(w: TypeArray, indices: IntArray, xValues: TypeArray) =
+        if (dot(w, indices, xValues) >= ZERO) ONE else ZERO
 }
 
 private fun dot(w: TypeArray, indices: IntArray, xs: TypeArray): Type {

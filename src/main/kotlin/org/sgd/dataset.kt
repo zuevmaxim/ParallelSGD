@@ -6,7 +6,7 @@ import kotlin.system.measureTimeMillis
 
 typealias Type = Float
 typealias TypeArray = FloatArray
-fun Collection<Type>.toArray() = toFloatArray()
+
 fun String.toWorkingType(): Type = toFloat()
 const val ONE: Type = 1f
 const val ZERO: Type = 0f
@@ -28,12 +28,15 @@ class DataSet(val points: List<DataPoint>) {
 interface DataPointLoss {
     fun loss(w: TypeArray): Type
     fun gradientStep(w: TypeArray, learningRate: Type)
+    fun predict(w: TypeArray, indices: IntArray, xValues: TypeArray): Type
 }
 
-abstract class DataSetLoss(dataSet: DataSet) {
-    val pointLoss = dataSet.points.map { pointLoss(it) }
+interface Loss {
+    fun pointLoss(p: DataPoint): DataPointLoss
+}
 
-    protected abstract fun pointLoss(p: DataPoint): DataPointLoss
+class DataSetLoss(private val dataSet: DataSet, loss: Loss) {
+    val pointLoss = dataSet.points.map { loss.pointLoss(it) }
 
     fun loss(w: TypeArray): Type {
         var s: Type = ZERO
@@ -42,6 +45,22 @@ abstract class DataSetLoss(dataSet: DataSet) {
             s += points[it].loss(w)
         }
         return s / points.size
+    }
+
+    fun precision(w: TypeArray): Pair<Double, Double> {
+        var truePositive = 0
+        var falsePositive = 0
+        var trueNegative = 0
+        var falseNegative = 0
+        for ((point, loss) in dataSet.points zip pointLoss) {
+            val prediction = loss.predict(w, point.indices, point.xValues)
+            if (prediction == ONE) {
+                if (prediction == point.y) truePositive++ else falsePositive++
+            } else {
+                if (prediction == point.y) trueNegative++ else falseNegative++
+            }
+        }
+        return truePositive.toDouble() / (truePositive + falseNegative) to trueNegative.toDouble() / (trueNegative + falsePositive)
     }
 }
 

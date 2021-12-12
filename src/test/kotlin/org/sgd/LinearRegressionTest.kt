@@ -29,8 +29,8 @@ val features by lazy { test.points.asSequence().plus(train.points).maxOf { it.in
 class RunRegressionTask(
     val method: String, val learningRate: Type, val stepDecay: Type, val workingThreads: Int, val targetLoss: Type
 ) : Benchmark() {
-    private val trainLoss = LinearRegressionLoss(train)
-    private val testLoss = LinearRegressionLoss(test)
+    private val trainLoss = DataSetLoss(train, LinearRegressionLoss())
+    private val testLoss = DataSetLoss(test, LinearRegressionLoss())
 
     @Operation
     fun run(): Type {
@@ -47,8 +47,8 @@ class RunRegressionTask(
 class SequentialRegressionTask(
     val learningRate: Type, val stepDecay: Type, val iterations: Int
 ) : Benchmark() {
-    val trainLoss = LinearRegressionLoss(train)
-    val testLoss = LinearRegressionLoss(test)
+    private val trainLoss = DataSetLoss(train, LinearRegressionLoss())
+    private val testLoss = DataSetLoss(test, LinearRegressionLoss())
     var loss = BenchmarkCounter()
     val counter = BenchmarkCounter()
 
@@ -76,8 +76,8 @@ class LinearRegressionTest {
     @Test
     fun sequentialSolver() {
         runBenchmark<SequentialRegressionTask> {
-            param(SequentialRegressionTask::learningRate, 0.5)
-            param(SequentialRegressionTask::stepDecay, 0.8)
+            param(SequentialRegressionTask::learningRate, 0.5.toType())
+            param(SequentialRegressionTask::stepDecay, 0.8.toType())
             param(SequentialRegressionTask::iterations, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
             approximateBatchSize(10)
             measurementMode(MeasurementMode.AVERAGE_TIME, TimeUnit.SECONDS)
@@ -92,8 +92,8 @@ class LinearRegressionTest {
 
     @Test
     fun run() {
-        val trainLoss = LinearRegressionLoss(train)
-        val testLoss = LinearRegressionLoss(test)
+        val trainLoss = DataSetLoss(train, LinearRegressionLoss())
+        val testLoss = DataSetLoss(test, LinearRegressionLoss())
         val solver = ClusterParallelSGDSolver(0.5.toType(), 128, 0.8.toType(), 32)
         val result = solver.solve(trainLoss, testLoss, TypeArray(features + 1), 0.025.toType())
         println(testLoss.loss(result.w))
