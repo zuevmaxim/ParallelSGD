@@ -7,7 +7,7 @@ import kotlin.system.measureTimeMillis
 typealias Type = Float
 typealias TypeArray = FloatArray
 
-fun String.toWorkingType(): Type = toFloat()
+fun String.toType(): Type = toFloat()
 const val ONE: Type = 1f
 const val ZERO: Type = 0f
 fun Double.toType(): Type = toFloat()
@@ -77,7 +77,7 @@ fun loadDataSet(file: File): DataSet {
                 repeat(parts.size - 1) { index ->
                     val (id, value) = parts[index + 1].split(':')
                     indices[index] = id.toInt()
-                    values[index] = value.toWorkingType()
+                    values[index] = value.toType()
                 }
                 points.add(DataPoint(indices, values, y))
             }
