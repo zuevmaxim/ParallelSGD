@@ -150,8 +150,8 @@ class LinearRegressionTest {
         configureBenchmark: BenchmarkConfiguration<RunRegressionTask>.() -> Unit = {},
         plotExtra: BenchmarkResults<RunRegressionTask>.() -> Unit = {}
     ) {
-        val threadsPerCluster = listOf("${CLUSTER_METHOD_PREFIX}32")//logSequence(numaConfig.values.maxOf { it.size }).map { "$CLUSTER_METHOD_PREFIX$it" }
-        val threads = listOf(1, 128)//logSequence(Runtime.getRuntime().availableProcessors())
+        val threadsPerCluster = logSequence(numaConfig.values.maxOf { it.size }).map { "$CLUSTER_METHOD_PREFIX$it" }
+        val threads = logSequence(Runtime.getRuntime().availableProcessors())
         runBenchmark<RunRegressionTask> {
             param(RunRegressionTask::method, threadsPerCluster)
             param(RunRegressionTask::learningRate, 0.5.toType())
