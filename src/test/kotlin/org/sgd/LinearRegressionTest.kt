@@ -158,7 +158,7 @@ class LinearRegressionTest {
             param(RunRegressionTask::stepDecay, 0.8.toType())
             param(RunRegressionTask::targetLoss, 0.024.toType())
             param(RunRegressionTask::workingThreads, threads)
-            approximateBatchSize(30)
+            approximateBatchSize(50)
             measurementMode(MeasurementMode.AVERAGE_TIME, TimeUnit.SECONDS)
             configureBenchmark()
         }.run {
