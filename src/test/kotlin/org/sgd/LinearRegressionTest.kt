@@ -17,7 +17,7 @@ private const val CLUSTER_METHOD_PREFIX = "cluster-"
 
 const val DATASET = "rcv1"
 
-val baseDir = File(".").let {
+val baseDir = File("../datasets").let {
     if (File(it, DATASET).exists()) it
     else File("/home/maksim.zuev/datasets")
 }
@@ -119,6 +119,22 @@ class LinearRegressionTest {
             configure("LLC_load_misses")
             valueAxis(ValueAxis.LLC_load_misses)
         }
+        for (p: String in logSequence(numaConfig.values.maxOf { it.size }).map { "$CLUSTER_METHOD_PREFIX$it" }) {
+            iterationResults.entries.filter {
+                it.key.params[RunRegressionTask::method.name]!!.param == p
+            }.forEach {
+                it.value.metrics["store_misses, %"] = it.value.metrics["LLC-store-misses, #/op"]!!.toDouble() / it.value.metrics["LLC-stores, #/op"]!!.toDouble()
+                it.value.metrics["load_misses, %"] = it.value.metrics["LLC-load-misses, #/op"]!!.toDouble() / it.value.metrics["LLC-loads, #/op"]!!.toDouble()
+            }
+        }
+        plot(xParameter = RunRegressionTask::workingThreads) {
+            configure("store_misses%")
+            valueAxis(ValueAxis.CustomMetric("store_misses, %"))
+        }
+        plot(xParameter = RunRegressionTask::workingThreads) {
+            configure("load_misses%")
+            valueAxis(ValueAxis.CustomMetric("load_misses, %"))
+        }
     }
 
     private fun PlotConfiguration<RunRegressionTask>.configure(name: String) {
@@ -134,8 +150,8 @@ class LinearRegressionTest {
         configureBenchmark: BenchmarkConfiguration<RunRegressionTask>.() -> Unit = {},
         plotExtra: BenchmarkResults<RunRegressionTask>.() -> Unit = {}
     ) {
-        val threadsPerCluster = logSequence(numaConfig.values.maxOf { it.size }).map { "$CLUSTER_METHOD_PREFIX$it" }
-        val threads = logSequence(Runtime.getRuntime().availableProcessors())
+        val threadsPerCluster = listOf("${CLUSTER_METHOD_PREFIX}32")//logSequence(numaConfig.values.maxOf { it.size }).map { "$CLUSTER_METHOD_PREFIX$it" }
+        val threads = listOf(1, 128)//logSequence(Runtime.getRuntime().availableProcessors())
         runBenchmark<RunRegressionTask> {
             param(RunRegressionTask::method, threadsPerCluster)
             param(RunRegressionTask::learningRate, 0.5.toType())
@@ -194,4 +210,22 @@ fun logSequence(maxValue: Int, step: Double = 2.0): List<Int> {
         value /= step
     }
     return result.toList().sorted()
+}
+
+fun splitDataset() {
+    val source = ""
+    val train = "../datasets/xxx"
+    val test = "../datasets/xxx.t"
+    File(source).useLines {
+        val strings = it.toMutableList()
+        strings.shuffle()
+        File(train).run {
+            createNewFile()
+            writeText(strings.subList(0, (strings.size * 0.8).toInt()).joinToString("\n"))
+        }
+        File(test).run {
+            createNewFile()
+            writeText(strings.subList((strings.size * 0.8).toInt(), strings.size).joinToString("\n"))
+        }
+    }
 }
