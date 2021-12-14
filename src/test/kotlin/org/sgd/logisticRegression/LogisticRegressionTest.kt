@@ -16,7 +16,19 @@ private const val AVERAGE_LOSS_METRIC = "average loss"
 private const val SPEEDUP_METRIC = "speedup"
 private const val CLUSTER_METHOD_PREFIX = "cluster-"
 
-private const val DATASET = "rcv1"
+private const val DATASET = "webspam"
+private val params = hashMapOf(
+    "rcv1" to hashMapOf(
+        "learningRate" to 0.2.toType(),
+        "stepDecay" to 0.8.toType(),
+        "targetLoss" to 0.024.toType()
+    ),
+    "webspam" to hashMapOf(
+        "learningRate" to 0.5.toType(),
+        "stepDecay" to 0.8.toType(),
+        "targetLoss" to 0.076.toType()
+    ),
+)
 
 val baseDir = File("../datasets").let {
     if (File(it, DATASET).exists()) it
@@ -75,10 +87,11 @@ class LinearRegressionTest {
 
     @Test
     fun sequentialSolver() {
+        val p = params[DATASET]!!
         runBenchmark<SequentialRegressionTask> {
-            param(SequentialRegressionTask::learningRate, 0.5.toType())
-            param(SequentialRegressionTask::stepDecay, 0.8.toType())
-            param(SequentialRegressionTask::iterations, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+            param(SequentialRegressionTask::learningRate, p["learningRate"])
+            param(SequentialRegressionTask::stepDecay, p["stepDecay"])
+            param(SequentialRegressionTask::iterations, 1..20)
             approximateBatchSize(10)
             measurementMode(MeasurementMode.AVERAGE_TIME, TimeUnit.SECONDS)
             metric(AVERAGE_LOSS_METRIC) { loss.value / counter.value.toDouble() }
@@ -94,7 +107,8 @@ class LinearRegressionTest {
     fun run() {
         val trainLoss = DataSetLoss(dataset.first, LogisticRegressionLoss())
         val testLoss = DataSetLoss(dataset.second, LogisticRegressionLoss())
-        val solver = ClusterParallelSGDSolver(0.5.toType(), 128, 0.8.toType(), 32)
+        val p = params[DATASET]!!
+        val solver = ClusterParallelSGDSolver(p["learningRate"]!!, 128, p["stepDecay"]!!, 32)
         val result = solver.solve(trainLoss, testLoss, TypeArray(features + 1), 0.025.toType())
         println(testLoss.loss(result.w))
     }
@@ -152,11 +166,12 @@ class LinearRegressionTest {
     ) {
         val threadsPerCluster = logSequence(numaConfig.values.maxOf { it.size }).map { "$CLUSTER_METHOD_PREFIX$it" }
         val threads = logSequence(Runtime.getRuntime().availableProcessors())
+        val p = params[DATASET]!!
         runBenchmark<RunRegressionTask> {
             param(RunRegressionTask::method, threadsPerCluster)
-            param(RunRegressionTask::learningRate, 0.5.toType())
-            param(RunRegressionTask::stepDecay, 0.8.toType())
-            param(RunRegressionTask::targetLoss, 0.024.toType())
+            param(RunRegressionTask::learningRate, p["learningRate"])
+            param(RunRegressionTask::stepDecay, p["stepDecay"])
+            param(RunRegressionTask::targetLoss, p["targetLoss"])
             param(RunRegressionTask::workingThreads, threads)
             approximateBatchSize(50)
             measurementMode(MeasurementMode.AVERAGE_TIME, TimeUnit.SECONDS)
