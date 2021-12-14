@@ -12,11 +12,11 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
 
-private const val AVERAGE_LOSS_METRIC = "average loss"
-private const val SPEEDUP_METRIC = "speedup"
-private const val CLUSTER_METHOD_PREFIX = "cluster-"
+const val AVERAGE_LOSS_METRIC = "average loss"
+const val SPEEDUP_METRIC = "speedup"
+const val CLUSTER_METHOD_PREFIX = "cluster-"
 
-private const val DATASET = "webspam"
+private const val DATASET = "rcv1"
 private val params = hashMapOf(
     "rcv1" to hashMapOf(
         "learningRate" to 0.5.toType(),
@@ -26,7 +26,7 @@ private val params = hashMapOf(
     "webspam" to hashMapOf(
         "learningRate" to 0.2.toType(),
         "stepDecay" to 0.8.toType(),
-        "targetLoss" to 0.076.toType()
+        "targetLoss" to 0.0756.toType()
     ),
 )
 
@@ -41,8 +41,8 @@ private val features by lazy { dataset.first.points.asSequence().plus(dataset.se
 class RunRegressionTask(
     val method: String, val learningRate: Type, val stepDecay: Type, val workingThreads: Int, val targetLoss: Type
 ) : Benchmark() {
-    private val trainLoss = DataSetLoss(dataset.first, LogisticRegressionLoss())
-    private val testLoss = DataSetLoss(dataset.second, LogisticRegressionLoss())
+    private val trainLoss = LogisticRegressionModel(dataset.first, features)
+    private val testLoss = LogisticRegressionModel(dataset.second, features)
 
     @Operation
     fun run(): Type {
@@ -51,7 +51,7 @@ class RunRegressionTask(
             method.startsWith(CLUSTER_METHOD_PREFIX) -> ClusterParallelSGDSolver(learningRate, workingThreads, stepDecay, method.substring(CLUSTER_METHOD_PREFIX.length).toInt())
             else -> error("Unknown method $method")
         }
-        val result = solver.solve(trainLoss, testLoss, TypeArray(features + 1), targetLoss)
+        val result = solver.solve(trainLoss, testLoss, targetLoss)
         return testLoss.loss(result.w)
     }
 }
@@ -59,15 +59,15 @@ class RunRegressionTask(
 class SequentialRegressionTask(
     val learningRate: Type, val stepDecay: Type, val iterations: Int
 ) : Benchmark() {
-    private val trainLoss = DataSetLoss(dataset.first, LogisticRegressionLoss())
-    private val testLoss = DataSetLoss(dataset.second, LogisticRegressionLoss())
+    private val trainLoss = LogisticRegressionModel(dataset.first, features)
+    private val testLoss = LogisticRegressionModel(dataset.second, features)
     var loss = BenchmarkCounter()
     val counter = BenchmarkCounter()
 
     @Operation
     fun run(): Type {
         val solver = SequentialSGDSolver(iterations, learningRate, stepDecay)
-        val result = solver.solve(trainLoss, testLoss, TypeArray(features + 1), ZERO)
+        val result = solver.solve(trainLoss, testLoss, ZERO)
         return testLoss.loss(result.w).also {
             val scale = 1e3.toLong()
             loss.inc((it * scale).toLong())
@@ -105,11 +105,11 @@ class LinearRegressionTest {
 
     @Test
     fun run() {
-        val trainLoss = DataSetLoss(dataset.first, LogisticRegressionLoss())
-        val testLoss = DataSetLoss(dataset.second, LogisticRegressionLoss())
+        val trainLoss = LogisticRegressionModel(dataset.first, features)
+        val testLoss = LogisticRegressionModel(dataset.second, features)
         val p = params[DATASET]!!
         val solver = ClusterParallelSGDSolver(p["learningRate"]!!, 128, p["stepDecay"]!!, 32)
-        val result = solver.solve(trainLoss, testLoss, TypeArray(features + 1), 0.025.toType())
+        val result = solver.solve(trainLoss, testLoss, p["targetLoss"]!!)
         println(testLoss.loss(result.w))
     }
 

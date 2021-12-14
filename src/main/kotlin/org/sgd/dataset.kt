@@ -25,24 +25,19 @@ class DataSet(val points: List<DataPoint>) {
     }
 }
 
-interface DataPointLoss {
-    fun loss(w: TypeArray): Type
-    fun gradientStep(w: TypeArray, learningRate: Type)
-    fun predict(w: TypeArray, indices: IntArray, xValues: TypeArray): Type
-}
 
-interface Loss {
-    fun pointLoss(p: DataPoint): DataPointLoss
-}
-
-class DataSetLoss(private val dataSet: DataSet, loss: Loss) {
-    val pointLoss = dataSet.points.map { loss.pointLoss(it) }
+abstract class Model(dataSet: DataSet) {
+    val points = dataSet.points
+    abstract fun loss(p: DataPoint, w: TypeArray): Type
+    abstract fun gradientStep(p: DataPoint, w: TypeArray, learningRate: Type)
+    abstract fun predict(w: TypeArray, indices: IntArray, xValues: TypeArray): Type
+    abstract fun createWeights(): TypeArray
 
     fun loss(w: TypeArray): Type {
         var s: Type = ZERO
-        val points = pointLoss
+        val points = points
         repeat(points.size) {
-            s += points[it].loss(w)
+            s += loss(points[it], w)
         }
         return s / points.size
     }
@@ -52,8 +47,8 @@ class DataSetLoss(private val dataSet: DataSet, loss: Loss) {
         var falsePositive = 0
         var trueNegative = 0
         var falseNegative = 0
-        for ((point, loss) in dataSet.points zip pointLoss) {
-            val prediction = loss.predict(w, point.indices, point.xValues)
+        for (point in points) {
+            val prediction = predict(w, point.indices, point.xValues)
             if (prediction == ONE) {
                 if (prediction == point.y) truePositive++ else falsePositive++
             } else {

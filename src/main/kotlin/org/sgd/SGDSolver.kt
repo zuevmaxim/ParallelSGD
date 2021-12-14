@@ -13,12 +13,12 @@ import kotlin.random.Random
 class SGDResult(val w: TypeArray, val timeNsToWeights: LinkedHashMap<Long, TypeArray>)
 
 interface SGDSolver {
-    fun solve(loss: DataSetLoss, testLoss: DataSetLoss, initial: TypeArray, targetLoss: Type): SGDResult
+    fun solve(loss: Model, testLoss: Model, targetLoss: Type): SGDResult
 }
 
 
 inline fun measureIterations(
-    testLoss: DataSetLoss,
+    testLoss: Model,
     targetLoss: Type,
     crossinline accessWeights: () -> TypeArray,
     iterations: (AtomicBoolean) -> Unit
@@ -47,9 +47,9 @@ class SequentialSGDSolver(
     private val alpha: Type,
     private val stepDecay: Type
 ) : SGDSolver {
-    override fun solve(loss: DataSetLoss, testLoss: DataSetLoss, initial: TypeArray, targetLoss: Type): SGDResult {
-        val w = initial
-        val fs = loss.pointLoss
+    override fun solve(loss: Model, testLoss: Model, targetLoss: Type): SGDResult {
+        val w = loss.createWeights()
+        val fs = loss.points
         val random = Random
         val n = fs.size
         val timeToLoss = measureIterations(testLoss, targetLoss, { w.copyOf() }) {
@@ -57,7 +57,7 @@ class SequentialSGDSolver(
             repeat(iterations) {
                 repeat(n) {
                     val i = random.nextInt(n)
-                    fs[i].gradientStep(w, learningRate)
+                    loss.gradientStep(fs[i], w, learningRate)
                 }
                 learningRate *= stepDecay
             }
@@ -73,21 +73,22 @@ class ParallelSGDSolver(
 ) : SGDSolver {
     private lateinit var stop: AtomicBoolean
 
-    override fun solve(loss: DataSetLoss, testLoss: DataSetLoss, initial: TypeArray, targetLoss: Type): SGDResult {
-        val tasks = numaConfig.values.flatten().take(threads).map { threadId -> Thread { threadSolve(initial, threadId, loss) } }
-        val timeToLoss = measureIterations(testLoss, targetLoss, { initial.copyOf() }) {
+    override fun solve(loss: Model, testLoss: Model, targetLoss: Type): SGDResult {
+        val w = loss.createWeights()
+        val tasks = numaConfig.values.flatten().take(threads).map { threadId -> Thread { threadSolve(w, threadId, loss) } }
+        val timeToLoss = measureIterations(testLoss, targetLoss, { w.copyOf() }) {
             stop = it
             tasks
                 .onEach { it.start() }
                 .forEach { it.join() }
         }
 
-        return SGDResult(initial, timeToLoss)
+        return SGDResult(w, timeToLoss)
     }
 
-    private fun threadSolve(w: TypeArray, threadId: Int, loss: DataSetLoss) {
+    private fun threadSolve(w: TypeArray, threadId: Int, loss: Model) {
         bindCurrentThreadToCpu(threadId)
-        val points = loss.pointLoss
+        val points = loss.points
         var learningRate = alpha
         val stop = stop
         val n = points.size
@@ -95,7 +96,7 @@ class ParallelSGDSolver(
             repeat(n) {
                 if (stop.get()) return
                 val i = Random.nextInt(n)
-                points[i].gradientStep(w, learningRate)
+                loss.gradientStep(points[i], w, learningRate)
             }
             learningRate *= stepDecay
         }
@@ -143,27 +144,28 @@ class ClusterParallelSGDSolver(
     private val beta = findRoot { x -> x.pow(clusters.size) + x - 1.0 }.toType()
     private val lambda = 1 - beta.pow(clusters.size - 1)
     private val token = atomic(0)
-    private lateinit var test: DataSetLoss
+    private lateinit var test: Model
 
     @Volatile
     private lateinit var clustersData: List<ClusterData>
 
-    override fun solve(loss: DataSetLoss, testLoss: DataSetLoss, initial: TypeArray, targetLoss: Type): SGDResult {
-        clustersData = clusters.indices.map { i -> ClusterData(initial.copyOf(), initial.copyOf(), i) }
+    override fun solve(loss: Model, testLoss: Model, targetLoss: Type): SGDResult {
+        val w = loss.createWeights()
+        clustersData = clusters.indices.map { i -> ClusterData(w.copyOf(), w.copyOf(), i) }
         test = testLoss
 
         val tasks = clusters.withIndex().flatMap { (clusterId, cores) ->
             cores.indices
                 .map { i -> Thread { threadSolve(clustersData[clusterId], cores[i], cores[(i + 1) % cores.size], loss) } }
         }
-        val timeToLoss = measureIterations(testLoss, targetLoss, { getResults(TypeArray(initial.size)) }) {
+        val timeToLoss = measureIterations(testLoss, targetLoss, { getResults(TypeArray(w.size)) }) {
             stop = it
             tasks
                 .onEach { it.start() }
                 .forEach { it.join() }
         }
 
-        return SGDResult(getResults(initial), timeToLoss)
+        return SGDResult(getResults(w), timeToLoss)
     }
 
     private fun getResults(buffer: TypeArray): TypeArray {
@@ -178,10 +180,10 @@ class ClusterParallelSGDSolver(
         return buffer
     }
 
-    private fun threadSolve(clusterData: ClusterData, threadId: Int, nextThreadId: Int, loss: DataSetLoss) {
+    private fun threadSolve(clusterData: ClusterData, threadId: Int, nextThreadId: Int, loss: Model) {
         bindCurrentThreadToCpu(threadId)
         val w = clusterData.w
-        val points = loss.pointLoss
+        val points = loss.points
         var learningRate = alpha
 
         var step = 0
@@ -199,7 +201,7 @@ class ClusterParallelSGDSolver(
                     return
                 }
                 val i = Random.nextInt(n)
-                points[i].gradientStep(w, learningRate)
+                loss.gradientStep(points[i], w, learningRate)
 
                 if (shouldSync) {
                     if (!locked) {
