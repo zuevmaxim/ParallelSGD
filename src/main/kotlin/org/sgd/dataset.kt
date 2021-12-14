@@ -64,14 +64,12 @@ class DataSetLoss(private val dataSet: DataSet, loss: Loss) {
     }
 }
 
-
-fun loadDataSet(file: File): DataSet {
+private inline fun loadDataSet(file: File, preprocessLabels: (String) -> Type): DataSet {
     val points = mutableListOf<DataPoint>()
     val timeMs = measureTimeMillis {
         file.useLines { lines ->
             lines.forEach { line ->
                 val parts = line.trim().split(" ")
-                val y = if (parts[0].toInt() == 1) ONE else ZERO
                 val indices = IntArray(parts.size - 1)
                 val values = TypeArray(parts.size - 1)
                 repeat(parts.size - 1) { index ->
@@ -79,12 +77,27 @@ fun loadDataSet(file: File): DataSet {
                     indices[index] = id.toInt()
                     values[index] = value.toType()
                 }
-                points.add(DataPoint(indices, values, y))
+                points.add(DataPoint(indices, values, preprocessLabels(parts[0])))
             }
         }
     }
     println("Dataset ${file.name} loaded in ${timeMs / 1000} s")
     return DataSet(points)
+}
+
+private fun loadBinaryDataSet(file: File) = loadDataSet(file) { label ->
+    if (label.toInt() == 1) ONE else ZERO
+}
+
+fun loadBinaryDataSet(train: File, test: File) =  loadBinaryDataSet(train) to loadBinaryDataSet(test)
+
+fun loadMulticlassDataSet(file: File): Pair<DataSet, DataSet> {
+    val keyMap = hashMapOf<Int, Type>()
+    return loadDataSet(file) {
+        keyMap.getOrPut(it.toInt()) { keyMap.size.toType() }
+    } to loadDataSet(file) {
+        keyMap[it.toInt()] ?: error("There is no label $it in train dataset!")
+    }
 }
 
 fun TypeArray.resetToZero() {

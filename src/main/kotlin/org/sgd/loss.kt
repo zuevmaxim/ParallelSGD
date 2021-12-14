@@ -3,11 +3,11 @@ package org.sgd
 import kotlin.math.abs
 import kotlin.math.exp
 
-class LinearRegressionLoss : Loss {
-    override fun pointLoss(p: DataPoint) = LinearRegressionPointLoss(p)
+class LogisticRegressionLoss : Loss {
+    override fun pointLoss(p: DataPoint) = LogisticRegressionPointLoss(p)
 }
 
-class LinearRegressionPointLoss(private val p: DataPoint) : DataPointLoss {
+class LogisticRegressionPointLoss(private val p: DataPoint) : DataPointLoss {
     override fun loss(w: TypeArray): Type = abs(p.y - predict(w, p.indices, p.xValues))
 
     override fun gradientStep(w: TypeArray, learningRate: Type) {
@@ -23,6 +23,20 @@ class LinearRegressionPointLoss(private val p: DataPoint) : DataPointLoss {
 
     override fun predict(w: TypeArray, indices: IntArray, xValues: TypeArray) =
         if (dot(w, indices, xValues) >= ZERO) ONE else ZERO
+}
+
+class MulticlassLogisticRegressionLoss(private val numberOfClasses: Int) : Loss {
+    override fun pointLoss(p: DataPoint) = MulticlassLogisticRegressionPointLoss(p, numberOfClasses)
+}
+
+class MulticlassLogisticRegressionPointLoss(private val p: DataPoint, private val numberOfClasses: Int) : DataPointLoss {
+    override fun loss(w: TypeArray) = TODO()
+
+    override fun gradientStep(w: TypeArray, learningRate: Type) {
+        TODO()
+    }
+
+    override fun predict(w: TypeArray, indices: IntArray, xValues: TypeArray) = TODO()
 }
 
 private fun dot(w: TypeArray, indices: IntArray, xs: TypeArray): Type {

@@ -1,4 +1,4 @@
-package org.sgd
+package org.sgd.logisticRegression
 
 import benchmark.Profiler
 import kotlinx.smartbench.benchmark.*
@@ -7,6 +7,7 @@ import kotlinx.smartbench.graphic.PlotConfiguration
 import kotlinx.smartbench.graphic.Scaling
 import kotlinx.smartbench.graphic.ValueAxis
 import org.junit.jupiter.api.Test
+import org.sgd.*
 import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
@@ -15,22 +16,21 @@ private const val AVERAGE_LOSS_METRIC = "average loss"
 private const val SPEEDUP_METRIC = "speedup"
 private const val CLUSTER_METHOD_PREFIX = "cluster-"
 
-const val DATASET = "rcv1"
+private const val DATASET = "rcv1"
 
 val baseDir = File("../datasets").let {
     if (File(it, DATASET).exists()) it
     else File("/home/maksim.zuev/datasets")
 }
 
-val train by lazy { loadDataSet(File(baseDir, DATASET)) }
-val test by lazy { loadDataSet(File(baseDir, "$DATASET.t")) }
-val features by lazy { test.points.asSequence().plus(train.points).maxOf { it.indices.maxOrNull() ?: 0 } }
+private val dataset by lazy { loadBinaryDataSet(File(baseDir, DATASET), File(baseDir, "$DATASET.t")) }
+private val features by lazy { dataset.first.points.asSequence().plus(dataset.second.points).maxOf { it.indices.maxOrNull() ?: 0 } }
 
 class RunRegressionTask(
     val method: String, val learningRate: Type, val stepDecay: Type, val workingThreads: Int, val targetLoss: Type
 ) : Benchmark() {
-    private val trainLoss = DataSetLoss(train, LinearRegressionLoss())
-    private val testLoss = DataSetLoss(test, LinearRegressionLoss())
+    private val trainLoss = DataSetLoss(dataset.first, LogisticRegressionLoss())
+    private val testLoss = DataSetLoss(dataset.second, LogisticRegressionLoss())
 
     @Operation
     fun run(): Type {
@@ -47,8 +47,8 @@ class RunRegressionTask(
 class SequentialRegressionTask(
     val learningRate: Type, val stepDecay: Type, val iterations: Int
 ) : Benchmark() {
-    private val trainLoss = DataSetLoss(train, LinearRegressionLoss())
-    private val testLoss = DataSetLoss(test, LinearRegressionLoss())
+    private val trainLoss = DataSetLoss(dataset.first, LogisticRegressionLoss())
+    private val testLoss = DataSetLoss(dataset.second, LogisticRegressionLoss())
     var loss = BenchmarkCounter()
     val counter = BenchmarkCounter()
 
@@ -92,8 +92,8 @@ class LinearRegressionTest {
 
     @Test
     fun run() {
-        val trainLoss = DataSetLoss(train, LinearRegressionLoss())
-        val testLoss = DataSetLoss(test, LinearRegressionLoss())
+        val trainLoss = DataSetLoss(dataset.first, LogisticRegressionLoss())
+        val testLoss = DataSetLoss(dataset.second, LogisticRegressionLoss())
         val solver = ClusterParallelSGDSolver(0.5.toType(), 128, 0.8.toType(), 32)
         val result = solver.solve(trainLoss, testLoss, TypeArray(features + 1), 0.025.toType())
         println(testLoss.loss(result.w))
