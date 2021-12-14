@@ -19,12 +19,12 @@ private const val CLUSTER_METHOD_PREFIX = "cluster-"
 private const val DATASET = "webspam"
 private val params = hashMapOf(
     "rcv1" to hashMapOf(
-        "learningRate" to 0.2.toType(),
+        "learningRate" to 0.5.toType(),
         "stepDecay" to 0.8.toType(),
         "targetLoss" to 0.024.toType()
     ),
     "webspam" to hashMapOf(
-        "learningRate" to 0.5.toType(),
+        "learningRate" to 0.2.toType(),
         "stepDecay" to 0.8.toType(),
         "targetLoss" to 0.076.toType()
     ),
