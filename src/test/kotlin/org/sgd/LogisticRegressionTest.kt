@@ -1,4 +1,4 @@
-package org.sgd.logisticRegression
+package org.sgd
 
 import benchmark.Profiler
 import kotlinx.smartbench.benchmark.*
@@ -7,7 +7,6 @@ import kotlinx.smartbench.graphic.PlotConfiguration
 import kotlinx.smartbench.graphic.Scaling
 import kotlinx.smartbench.graphic.ValueAxis
 import org.junit.jupiter.api.Test
-import org.sgd.*
 import java.util.concurrent.TimeUnit
 
 class LogisticRegressionTest {
