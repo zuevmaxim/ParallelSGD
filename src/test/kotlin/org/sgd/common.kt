@@ -23,7 +23,7 @@ val params: Map<String, Map<String, Type>> = hashMapOf(
         "learningRate" to 0.5.toType(),
         "stepDecay" to 0.8.toType(),
         "targetLoss" to 0.024.toType(),
-        "batch" to 10.toType(),
+        "batch" to 20.toType(),
     ),
     "webspam" to hashMapOf(
         "learningRate" to 0.2.toType(),

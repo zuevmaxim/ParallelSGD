@@ -11,7 +11,7 @@ import org.sgd.*
 import java.util.concurrent.TimeUnit
 
 class LogisticRegressionTest {
-    private val DATASET = "covtype"
+    private val DATASET = "rcv1"
 
     @Test
     fun sequentialSolver() = runSequentialBenchmark(DATASET)
