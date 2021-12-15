@@ -86,13 +86,13 @@ private fun loadBinaryDataSet(file: File) = loadDataSet(file) { label ->
 
 fun loadBinaryDataSet(train: File, test: File) =  loadBinaryDataSet(train) to loadBinaryDataSet(test)
 
-fun loadMulticlassDataSet(file: File): Pair<DataSet, DataSet> {
+fun loadMulticlassDataSet(train: File, test: File): Triple<DataSet, DataSet, Int> {
     val keyMap = hashMapOf<Int, Type>()
-    return loadDataSet(file) {
+    return Triple(loadDataSet(train) {
         keyMap.getOrPut(it.toInt()) { keyMap.size.toType() }
-    } to loadDataSet(file) {
+    }, loadDataSet(test) {
         keyMap[it.toInt()] ?: error("There is no label $it in train dataset!")
-    }
+    }, keyMap.size)
 }
 
 fun TypeArray.resetToZero() {

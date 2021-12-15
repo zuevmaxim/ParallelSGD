@@ -2,7 +2,6 @@ package org.sgd
 
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
-import org.sgd.logisticRegression.logSequence
 import kotlin.math.min
 
 class ClusterTest {
@@ -24,6 +23,13 @@ class ClusterTest {
                     }
                 }
             }
+        }
+    }
+
+    @Test
+    fun testNumaConfig() {
+        for ((node, cpus) in numaConfig) {
+            println("$node $cpus")
         }
     }
 }

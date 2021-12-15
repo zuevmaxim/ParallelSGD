@@ -10,31 +10,8 @@ import org.junit.jupiter.api.Test
 import org.sgd.*
 import java.io.File
 import java.util.concurrent.TimeUnit
-import kotlin.math.roundToInt
-
-const val AVERAGE_LOSS_METRIC = "average loss"
-const val SPEEDUP_METRIC = "speedup"
-const val CLUSTER_METHOD_PREFIX = "cluster-"
 
 private const val DATASET = "rcv1"
-private val params = hashMapOf(
-    "rcv1" to hashMapOf(
-        "learningRate" to 0.5.toType(),
-        "stepDecay" to 0.8.toType(),
-        "targetLoss" to 0.024.toType()
-    ),
-    "webspam" to hashMapOf(
-        "learningRate" to 0.2.toType(),
-        "stepDecay" to 0.8.toType(),
-        "targetLoss" to 0.0756.toType()
-    ),
-)
-
-val baseDir = File("../datasets").let {
-    if (File(it, DATASET).exists()) it
-    else File("/home/maksim.zuev/datasets")
-}
-
 private val dataset by lazy { loadBinaryDataSet(File(baseDir, DATASET), File(baseDir, "$DATASET.t")) }
 private val features by lazy { dataset.first.points.asSequence().plus(dataset.second.points).maxOf { it.indices.maxOrNull() ?: 0 } }
 
@@ -77,13 +54,6 @@ class SequentialRegressionTask(
 }
 
 class LinearRegressionTest {
-
-    @Test
-    fun testNumaConfig() {
-        for ((node, cpus) in numaConfig) {
-            println("$node $cpus")
-        }
-    }
 
     @Test
     fun sequentialSolver() {
@@ -202,45 +172,6 @@ class LinearRegressionTest {
                 valueAxis(ValueAxis.CustomMetric(SPEEDUP_METRIC))
             }
             plotExtra()
-        }
-    }
-}
-
-//fun getInterestingThreads(): List<Int> {
-//    val result = mutableListOf<Int>()
-//    val numaNodes = numaConfig.mapValues { it.value.size }
-//    for (i in numaNodes.keys.sorted()) {
-//        val threads = numaNodes[i]!!
-//        val last = result.lastOrNull() ?: 0
-//        result.addAll(logSequence(threads/*, sqrt(2.0)*/).map { it + last })
-//    }
-//    return result
-//}
-
-fun logSequence(maxValue: Int, step: Double = 2.0): List<Int> {
-    var value = maxValue.toDouble()
-    val result = hashSetOf<Int>()
-    while (value >= 1.0) {
-        result.add(value.roundToInt())
-        value /= step
-    }
-    return result.toList().sorted()
-}
-
-fun splitDataset() {
-    val source = ""
-    val train = "../datasets/xxx"
-    val test = "../datasets/xxx.t"
-    File(source).useLines {
-        val strings = it.toMutableList()
-        strings.shuffle()
-        File(train).run {
-            createNewFile()
-            writeText(strings.subList(0, (strings.size * 0.8).toInt()).joinToString("\n"))
-        }
-        File(test).run {
-            createNewFile()
-            writeText(strings.subList((strings.size * 0.8).toInt(), strings.size).joinToString("\n"))
         }
     }
 }
