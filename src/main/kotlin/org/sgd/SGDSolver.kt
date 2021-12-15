@@ -126,7 +126,7 @@ fun extractClusters(threads: Int, threadsPerCluster: Int): MutableList<List<Int>
 
 class ClusterParallelSGDSolver(
     private val alpha: Type,
-    threads: Int,
+    private val threads: Int,
     private val stepDecay: Type,
     threadsPerCluster: Int,
     private val stepsBeforeTokenPass: Int = 10000
@@ -192,16 +192,17 @@ class ClusterParallelSGDSolver(
         val stop = stop
         val n = points.size
         val stepsBeforeTokenPass = stepsBeforeTokenPass
+        val start = (n / threads) * threadId
+        val end = if (threadId == threads - 1) n else (n / threads) * (threadId + 1)
         while (true) {
-            repeat(n) {
+            repeat(end - start) {
                 if (stop.get()) {
                     if (locked) {
                         releaseToken(clusterData, nextThreadId)
                     }
                     return
                 }
-                val i = Random.nextInt(n)
-                loss.gradientStep(points[i], w, learningRate)
+                loss.gradientStep(points[it], w, learningRate)
 
                 if (shouldSync) {
                     if (!locked) {
