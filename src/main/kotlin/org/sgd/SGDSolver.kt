@@ -191,8 +191,10 @@ class ClusterParallelSGDSolver(
         val stop = stop
         val n = points.size
         val stepsBeforeTokenPass = stepsBeforeTokenPass
-        val start = (n / threads) * threadId
-        val end = if (threadId == threads - 1) n else (n / threads) * (threadId + 1)
+        val threads = threads
+        val block = n / threads
+        val start = block * threadId
+        val end = if (threadId == threads - 1) n else start + block
         while (true) {
             repeat(end - start) {
                 if (stop.get()) {
@@ -201,7 +203,7 @@ class ClusterParallelSGDSolver(
                     }
                     return
                 }
-                loss.gradientStep(points[it], w, learningRate)
+                loss.gradientStep(points[start + it], w, learningRate)
 
                 if (shouldSync) {
                     if (!locked) {
