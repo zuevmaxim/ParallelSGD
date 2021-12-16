@@ -146,7 +146,6 @@ class ClusterParallelSGDSolver(
     private val token = atomic(0)
     private lateinit var test: Model
 
-    @Volatile
     private lateinit var clustersData: List<ClusterData>
 
     override fun solve(loss: Model, testLoss: Model, targetLoss: Type): SGDResult {
