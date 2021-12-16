@@ -1,6 +1,8 @@
 package org.sgd
 
+import kotlinx.atomicfu.AtomicIntArray
 import java.io.File
+import kotlin.math.min
 import kotlin.random.Random
 import kotlin.system.measureTimeMillis
 
@@ -15,13 +17,13 @@ fun Int.toType(): Type = toFloat()
 
 class DataPoint(val indices: IntArray, val xValues: TypeArray, val y: Type)
 
-class DataSet(val points: List<DataPoint>) {
+class DataSet(val points: MutableList<DataPoint>) {
     val size get() = points.size
 
     fun split(part: Double): Pair<DataSet, DataSet> {
         require(0.0 < part && part < 1.0)
         val n = (size * part).toInt()
-        return DataSet(points.subList(0, n).toList()) to DataSet(points.subList(n, size).toList())
+        return DataSet(points.subList(0, n).toMutableList()) to DataSet(points.subList(n, size).toMutableList())
     }
 }
 
@@ -84,7 +86,7 @@ private fun loadBinaryDataSet(file: File) = loadDataSet(file) { label ->
     if (label.toInt() == 1) ONE else ZERO
 }
 
-fun loadBinaryDataSet(train: File, test: File) =  loadBinaryDataSet(train) to loadBinaryDataSet(test)
+fun loadBinaryDataSet(train: File, test: File) = loadBinaryDataSet(train) to loadBinaryDataSet(test)
 
 fun loadMulticlassDataSet(train: File, test: File): Triple<DataSet, DataSet, Int> {
     val keyMap = hashMapOf<Int, Type>()
@@ -134,10 +136,63 @@ inline fun repeat(n: Int, action: (Int) -> Unit) {
     }
 }
 
-fun <T> MutableList<T>.shuffle() {
-    repeat(size) { i ->
-        val j = Random.nextInt(i, size)
-        this[i] = this[j]
-            .also { this[j] = this[i] }
+fun <T> MutableList<T>.shuffle(start: Int = 0, end: Int = size) {
+    val n = end - start
+    repeat(n) { i ->
+        val j = Random.nextInt(i, n)
+        swap(start + i, start + j)
+    }
+}
+
+fun <T> MutableList<T>.swap(i: Int, j: Int) {
+    this[i] = this[j]
+        .also { this[j] = this[i] }
+}
+
+fun <T> parallelShuffleTask(points: MutableList<T>, threadId: Int, threads: Int, status: AtomicIntArray) {
+    val n = points.size
+    if (n < 1000 || threads == 1) {
+        points.shuffle()
+        return
+    }
+    val block = n / threads
+    val start = block * threadId
+    val end = if (threadId == threads - 1) n else block * (threadId + 1)
+
+    status[threadId].value = 0
+    points.shuffle(start, end)
+    var level = 1
+    while (true) {
+        status[threadId].value = level
+        if ((threadId ushr (level - 1) and 1) != 0) break
+        val blockCount = 1 shl (level - 1)
+        val neighbour = threadId + blockCount
+        if (neighbour < threads) {
+            while (status[neighbour].value != level);
+            val right = start + blockCount * block
+            val rightEnd = min(right + blockCount * block, n)
+            points.mergeShuffle(start, right, rightEnd)
+        } else if (threadId == 0) break
+        level++
+    }
+}
+
+private fun <T> MutableList<T>.mergeShuffle(left: Int, right: Int, end: Int) {
+    var i = left
+    var j = right
+    while (true) {
+        if (Random.nextBoolean()) {
+            if (i == j) break
+        } else {
+            if (j == end) break
+            swap(i, j)
+            j++
+        }
+        i++
+    }
+    while (i < end) {
+        val m = Random.nextInt(left, i)
+        swap(i, m)
+        i++
     }
 }

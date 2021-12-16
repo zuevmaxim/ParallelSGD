@@ -46,6 +46,7 @@ val params: Map<String, Map<String, Type>> = hashMapOf(
 )
 
 val models: Map<String, () -> Pair<Model, Model>> = hashMapOf(
+    "w8a" to ::createBinaryModel,
     "rcv1" to ::createBinaryModel,
     "webspam" to ::createBinaryModel,
     "news20" to ::createMulticlassModel,
