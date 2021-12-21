@@ -127,9 +127,9 @@ fun extractClusters(threads: Int, threadsPerCluster: Int): MutableList<List<Int>
 class ClusterParallelSGDSolver(
     private val alpha: Type,
     private val threads: Int,
-    private val stepDecay: Type,
+    stepDecay: Type,
     threadsPerCluster: Int,
-    private val stepsBeforeTokenPass: Int = 10000
+    private val stepsBeforeTokenPass: Int = 64
 ) : SGDSolver {
     private val clusters: List<List<Int>>
     private lateinit var stop: AtomicBoolean
@@ -140,6 +140,7 @@ class ClusterParallelSGDSolver(
         this.clusters = clusters
     }
 
+    private val stepDecay: Type = stepDecay.pow(ONE / clusters.size)
     private val AA = MethodHandles.arrayElementVarHandle(TypeArray::class.java)
     private val beta = findRoot { x -> x.pow(clusters.size) + x - 1.0 }.toType()
     private val lambda = 1 - beta.pow(clusters.size - 1)
@@ -157,7 +158,7 @@ class ClusterParallelSGDSolver(
             cores.indices
                 .map { i -> Thread { threadSolve(clustersData[clusterId], cores[i], cores[(i + 1) % cores.size], loss) } }
         }
-        val timeToLoss = measureIterations(testLoss, targetLoss, { getResults(TypeArray(w.size)) }) {
+        val timeToLoss = measureIterations(testLoss, targetLoss, { getResults(w) }) {
             stop = it
             tasks
                 .onEach { it.start() }
