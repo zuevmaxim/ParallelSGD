@@ -131,6 +131,7 @@ private fun runParallelBenchmark(
         approximateBatchSize(p["batch"]!!.toInt())
         measurementMode(MeasurementMode.AVERAGE_TIME, TimeUnit.SECONDS)
         configureBenchmark()
+        output("results/$dataset.csv")
     }.run {
         plot(xParameter = RunRegressionTask::workingThreads) {
             commonConfigure(dataset, "time")

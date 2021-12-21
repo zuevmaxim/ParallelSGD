@@ -22,7 +22,7 @@ val params: Map<String, Map<String, Type>> = hashMapOf(
     "rcv1" to hashMapOf(
         "learningRate" to 0.5.toType(),
         "stepDecay" to 0.8.toType(),
-        "targetLoss" to 0.024.toType(),
+        "targetLoss" to 0.0236.toType(),
         "batch" to 20.toType(),
     ),
     "webspam" to hashMapOf(
