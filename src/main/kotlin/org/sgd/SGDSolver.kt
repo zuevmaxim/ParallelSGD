@@ -5,6 +5,7 @@ import java.lang.invoke.MethodHandles
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.pow
 import kotlin.random.Random
@@ -129,7 +130,8 @@ class ClusterParallelSGDSolver(
     private val threads: Int,
     stepDecay: Type,
     threadsPerCluster: Int,
-    private val stepsBeforeTokenPass: Int = 64
+    private val stepsBeforeTokenPass: Int = 64,
+    private val tolerance: Type = 0.01.toType()
 ) : SGDSolver {
     private val clusters: List<List<Int>>
     private lateinit var stop: AtomicBoolean
@@ -196,6 +198,28 @@ class ClusterParallelSGDSolver(
         val block = n / threads
         val start = block * threadId
         val end = if (threadId == threads - 1) n else start + block
+
+        fun checkSync() {
+            if (shouldSync) {
+                if (!locked) {
+                    val tokenValue = token.value
+                    if (tokenValue >= 0 && clusterData.clusterId == tokenValue && threadId == clusterData.nextThread) {
+                        assert(token.compareAndSet(tokenValue, -(clusterData.clusterId + 1)))
+                        locked = true
+                        step = 0
+                        syncWithNext(clusterData)
+                    }
+                }
+
+                step++
+
+                if (locked && step == stepsBeforeTokenPass) {
+                    releaseToken(clusterData, nextThreadId)
+                    locked = false
+                }
+            }
+        }
+
         while (true) {
             repeat(end - start) {
                 if (stop.get()) {
@@ -205,27 +229,12 @@ class ClusterParallelSGDSolver(
                     return
                 }
                 loss.gradientStep(points[start + it], w, learningRate)
-
-                if (shouldSync) {
-                    if (!locked) {
-                        val tokenValue = token.value
-                        if (tokenValue >= 0 && clusterData.clusterId == tokenValue && threadId == clusterData.nextThread) {
-                            assert(token.compareAndSet(tokenValue, -(clusterData.clusterId + 1)))
-                            locked = true
-                            step = 0
-                            syncWithNext(clusterData)
-                        }
-                    }
-
-                    step++
-
-                    if (locked && step == stepsBeforeTokenPass) {
-                        releaseToken(clusterData, nextThreadId)
-                        locked = false
-                    }
-                }
+                checkSync()
             }
             learningRate *= stepDecay
+            if (threadId == 0) {
+                points.shuffle()
+            }
         }
     }
 
@@ -234,10 +243,14 @@ class ClusterParallelSGDSolver(
         val next = (clusterData.clusterId + 1) % clusters.size
         val w = clusterData.w
         val wPrev = clusterData.wPrev
+        val nextW = clustersData[next].w
+        val tolerance = tolerance
         repeat(w.size) { i ->
             val delta = w[i] - wPrev[i]
-            val nextValue = AA.getAndAdd(clustersData[next].w, i, beta * delta) as Type
-            wPrev[i] = lambda * nextValue + (1 - lambda) * wPrev[i] + beta * delta
+            if (abs(delta) > tolerance) {
+                val nextValue = AA.getAndAdd(nextW, i, beta * delta) as Type
+                wPrev[i] = lambda * nextValue + (1 - lambda) * wPrev[i] + beta * delta
+            }
         }
     }
 
