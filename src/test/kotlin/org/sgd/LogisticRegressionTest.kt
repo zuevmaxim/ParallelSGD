@@ -123,7 +123,7 @@ private fun runParallelBenchmark(
     val p = params[dataset]!!
     runBenchmark<RunRegressionTask> {
         param(RunRegressionTask::dataset, dataset)
-        param(RunRegressionTask::method, threadsPerCluster)
+        param(RunRegressionTask::method, "simple")
         param(RunRegressionTask::learningRate, p["learningRate"])
         param(RunRegressionTask::stepDecay, p["stepDecay"])
         param(RunRegressionTask::targetLoss, p["targetLoss"])
@@ -136,22 +136,22 @@ private fun runParallelBenchmark(
         plot(xParameter = RunRegressionTask::workingThreads) {
             commonConfigure(dataset, "time")
         }
-        plot(xParameter = RunRegressionTask::workingThreads) {
-            for (p: String in threadsPerCluster) {
-                val oneThreadTime = iterationResults.entries.single {
-                    val params = it.key.params
-                    params[RunRegressionTask::method.name]!!.param == p &&
-                        params[RunRegressionTask::workingThreads.name]!!.param == 1
-                }.value.resultValue(benchmarkConfiguration)
-                iterationResults.entries.filter {
-                    it.key.params[RunRegressionTask::method.name]!!.param == p
-                }.forEach {
-                    it.value.metrics[SPEEDUP_METRIC] = oneThreadTime / it.value.resultValue(benchmarkConfiguration)
-                }
-            }
-            commonConfigure(dataset, SPEEDUP_METRIC)
-            valueAxis(ValueAxis.CustomMetric(SPEEDUP_METRIC))
-        }
+//        plot(xParameter = RunRegressionTask::workingThreads) {
+//            for (p: String in threadsPerCluster) {
+//                val oneThreadTime = iterationResults.entries.single {
+//                    val params = it.key.params
+//                    params[RunRegressionTask::method.name]!!.param == p &&
+//                        params[RunRegressionTask::workingThreads.name]!!.param == 1
+//                }.value.resultValue(benchmarkConfiguration)
+//                iterationResults.entries.filter {
+//                    it.key.params[RunRegressionTask::method.name]!!.param == p
+//                }.forEach {
+//                    it.value.metrics[SPEEDUP_METRIC] = oneThreadTime / it.value.resultValue(benchmarkConfiguration)
+//                }
+//            }
+//            commonConfigure(dataset, SPEEDUP_METRIC)
+//            valueAxis(ValueAxis.CustomMetric(SPEEDUP_METRIC))
+//        }
         plotExtra()
     }
 }
@@ -175,20 +175,20 @@ fun runParallelBenchmarkWithProfiler(dataset: String) = runParallelBenchmark(dat
         commonConfigure(dataset, "LLC_load_misses")
         valueAxis(ValueAxis.LLC_load_misses)
     }
-    for (p: String in logSequence(numaConfig.values.maxOf { it.size }).map { "$CLUSTER_METHOD_PREFIX$it" }) {
-        iterationResults.entries.filter {
-            it.key.params[RunRegressionTask::method.name]!!.param == p
-        }.forEach {
-            it.value.metrics["store_misses, %"] = it.value.metrics["LLC-store-misses, #/op"]!!.toDouble() / it.value.metrics["LLC-stores, #/op"]!!.toDouble()
-            it.value.metrics["load_misses, %"] = it.value.metrics["LLC-load-misses, #/op"]!!.toDouble() / it.value.metrics["LLC-loads, #/op"]!!.toDouble()
-        }
-    }
-    plot(xParameter = RunRegressionTask::workingThreads) {
-        commonConfigure(dataset, "store_misses%")
-        valueAxis(ValueAxis.CustomMetric("store_misses, %"))
-    }
-    plot(xParameter = RunRegressionTask::workingThreads) {
-        commonConfigure(dataset, "load_misses%")
-        valueAxis(ValueAxis.CustomMetric("load_misses, %"))
-    }
+//    for (p: String in logSequence(numaConfig.values.maxOf { it.size }).map { "$CLUSTER_METHOD_PREFIX$it" }) {
+//        iterationResults.entries.filter {
+//            it.key.params[RunRegressionTask::method.name]!!.param == p
+//        }.forEach {
+//            it.value.metrics["store_misses, %"] = it.value.metrics["LLC-store-misses, #/op"]!!.toDouble() / it.value.metrics["LLC-stores, #/op"]!!.toDouble()
+//            it.value.metrics["load_misses, %"] = it.value.metrics["LLC-load-misses, #/op"]!!.toDouble() / it.value.metrics["LLC-loads, #/op"]!!.toDouble()
+//        }
+//    }
+//    plot(xParameter = RunRegressionTask::workingThreads) {
+//        commonConfigure(dataset, "store_misses%")
+//        valueAxis(ValueAxis.CustomMetric("store_misses, %"))
+//    }
+//    plot(xParameter = RunRegressionTask::workingThreads) {
+//        commonConfigure(dataset, "load_misses%")
+//        valueAxis(ValueAxis.CustomMetric("load_misses, %"))
+//    }
 }
