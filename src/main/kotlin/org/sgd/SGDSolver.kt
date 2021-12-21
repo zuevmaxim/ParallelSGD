@@ -154,14 +154,12 @@ class ClusterParallelSGDSolver(
     private val beta = findRoot { x -> x.pow(clusters.size) + x - 1.0 }.toType()
     private val lambda = 1 - beta.pow(clusters.size - 1)
     private val token = atomic(0)
-    private lateinit var test: Model
 
     private lateinit var clustersData: List<ClusterData>
 
     override fun solve(loss: Model, testLoss: Model, targetLoss: Type): SGDResult {
         val w = loss.createWeights()
         clustersData = clusters.indices.map { i -> ClusterData(w.copyOf(), w.copyOf(), i) }
-        test = testLoss
 
         val tasks = clusters.withIndex().flatMap { (clusterId, cores) ->
             cores.indices
