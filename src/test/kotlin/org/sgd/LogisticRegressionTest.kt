@@ -118,7 +118,7 @@ private fun runParallelBenchmark(
     configureBenchmark: BenchmarkConfiguration<RunRegressionTask>.() -> Unit = {},
     plotExtra: BenchmarkResults<RunRegressionTask>.() -> Unit = {}
 ) {
-    val threadsPerCluster = logSequence(numaConfig.values.maxOf { it.size }).map { "$CLUSTER_METHOD_PREFIX$it" }
+    val threadsPerCluster = logSequence(numaConfig.values.maxOf { it.size }).map { "$CLUSTER_METHOD_PREFIX$it" }.reversed()
     val threads = logSequence(Runtime.getRuntime().availableProcessors())
     val p = params[dataset]!!
     runBenchmark<RunRegressionTask> {
