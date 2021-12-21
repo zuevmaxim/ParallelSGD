@@ -38,7 +38,7 @@ inline fun measureIterations(
         }
     }, 0, 25, TimeUnit.MILLISECONDS)
     iterations(stop)
-    future.cancel(false)
+    future.cancel(true)
     scheduledThreadPool.shutdownNow()
     return timeNsToWeights
 }
@@ -77,7 +77,7 @@ class ParallelSGDSolver(
     override fun solve(loss: Model, testLoss: Model, targetLoss: Type): SGDResult {
         val w = loss.createWeights()
         val tasks = numaConfig.values.flatten().take(threads).map { threadId -> Thread { threadSolve(w, threadId, loss) } }
-        val timeToLoss = measureIterations(testLoss, targetLoss, { w.copyOf() }) {
+        val timeToLoss = measureIterations(testLoss, targetLoss, { w }) {
             stop = it
             tasks
                 .onEach { it.start() }
@@ -93,13 +93,20 @@ class ParallelSGDSolver(
         var learningRate = alpha
         val stop = stop
         val n = points.size
+
+        val block = n / threads
+        val start = block * threadId
+        val end = if (threadId == threads - 1) n else start + block
+
         while (true) {
-            repeat(n) {
+            repeat(end - start) {
                 if (stop.get()) return
-                val i = Random.nextInt(n)
-                loss.gradientStep(points[i], w, learningRate)
+                loss.gradientStep(points[start + it], w, learningRate)
             }
             learningRate *= stepDecay
+            if (threadId == 0) {
+                points.shuffle()
+            }
         }
     }
 }
