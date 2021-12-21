@@ -76,7 +76,7 @@ class ParallelSGDSolver(
 
     override fun solve(loss: Model, testLoss: Model, targetLoss: Type): SGDResult {
         val w = loss.createWeights()
-        val tasks = numaConfig.values.flatten().take(threads).map { threadId -> Thread { threadSolve(w, threadId, loss) } }
+        val tasks = numaConfig.values.flatten().take(threads).mapIndexed { i, threadId -> Thread { threadSolve(w, threadId, i, loss) } }
         val timeToLoss = measureIterations(testLoss, targetLoss, { w }) {
             stop = it
             tasks
@@ -87,7 +87,7 @@ class ParallelSGDSolver(
         return SGDResult(w, timeToLoss)
     }
 
-    private fun threadSolve(w: TypeArray, threadId: Int, loss: Model) {
+    private fun threadSolve(w: TypeArray, threadId: Int, index: Int, loss: Model) {
         bindCurrentThreadToCpu(threadId)
         val points = loss.points
         var learningRate = alpha
@@ -95,8 +95,8 @@ class ParallelSGDSolver(
         val n = points.size
 
         val block = n / threads
-        val start = block * threadId
-        val end = if (threadId == threads - 1) n else start + block
+        val start = block * index
+        val end = if (index == threads - 1) n else start + block
 
         while (true) {
             repeat(end - start) {
@@ -163,7 +163,7 @@ class ClusterParallelSGDSolver(
 
         val tasks = clusters.withIndex().flatMap { (clusterId, cores) ->
             cores.indices
-                .map { i -> Thread { threadSolve(clustersData[clusterId], cores[i], cores[(i + 1) % cores.size], loss) } }
+                .map { i -> Thread { threadSolve(clustersData[clusterId], cores[i], i, cores[(i + 1) % cores.size], loss) } }
         }
         val timeToLoss = measureIterations(testLoss, targetLoss, { getResults(w) }) {
             stop = it
@@ -187,7 +187,7 @@ class ClusterParallelSGDSolver(
         return buffer
     }
 
-    private fun threadSolve(clusterData: ClusterData, threadId: Int, nextThreadId: Int, loss: Model) {
+    private fun threadSolve(clusterData: ClusterData, threadId: Int, index: Int, nextThreadId: Int, loss: Model) {
         bindCurrentThreadToCpu(threadId)
         val w = clusterData.w
         val points = loss.points
@@ -201,8 +201,8 @@ class ClusterParallelSGDSolver(
         val stepsBeforeTokenPass = stepsBeforeTokenPass
         val threads = threads
         val block = n / threads
-        val start = block * threadId
-        val end = if (threadId == threads - 1) n else start + block
+        val start = block * index
+        val end = if (index == threads - 1) n else start + block
 
         fun checkSync() {
             if (shouldSync) {
