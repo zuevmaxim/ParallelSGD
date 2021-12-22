@@ -205,7 +205,7 @@ class ClusterParallelSGDSolver(
         val start = block * index
         val end = if (index == threads - 1) n else start + block
 
-        fun checkSync() {
+        fun checkSync(iteration: Int) {
             if (shouldSync) {
                 if (!locked) {
                     val tokenValue = token.value
@@ -213,7 +213,7 @@ class ClusterParallelSGDSolver(
                         assert(token.compareAndSet(tokenValue, -(clusterData.clusterId + 1)))
                         locked = true
                         step = 0
-                        syncWithNext(clusterData)
+                        syncWithNext(clusterData, iteration)
                     }
                 }
 
@@ -226,10 +226,10 @@ class ClusterParallelSGDSolver(
             }
         }
 
-        repeat(iterations) {
+        repeat(iterations) { iteration ->
             repeat(end - start) {
                 loss.gradientStep(points[start + it], w, learningRate)
-                checkSync()
+                checkSync(iteration)
             }
             learningRate *= stepDecay
 //            if (threadId == 0) {
@@ -241,18 +241,21 @@ class ClusterParallelSGDSolver(
         }
     }
 
-    private fun syncWithNext(clusterData: ClusterData) {
+    private fun syncWithNext(clusterData: ClusterData, iteration: Int) {
         if (clusters.size == 1) return
         val next = (clusterData.clusterId + 1) % clusters.size
         val w = clusterData.w
         val wPrev = clusterData.wPrev
         val nextW = clustersData[next].w
         val tolerance = tolerance
+        val c = beta * stepDecay.pow(iteration)
         repeat(w.size) { i ->
-            val delta = w[i] - wPrev[i]
+            var delta = w[i] - wPrev[i]
             if (abs(delta) > tolerance) {
-                val nextValue = AA.getAndAdd(nextW, i, beta * delta) as Type
-                wPrev[i] = lambda * nextValue + (1 - lambda) * wPrev[i] + beta * delta
+                delta *= c
+                val nextValue = AA.getAndAdd(nextW, i, delta) as Type
+                wPrev[i] = lambda * nextValue + (1 - lambda) * wPrev[i] + delta
+                w[i] = wPrev[i]
             }
         }
     }
