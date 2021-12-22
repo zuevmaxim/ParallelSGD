@@ -70,6 +70,7 @@ private fun createBinaryModel(datasetName: String): Pair<Model, Model> {
     val features = features(dataset.first, dataset.second)
     val trainLoss = LogisticRegressionModel(dataset.first, features)
     val testLoss = LogisticRegressionModel(dataset.second, features)
+    trainLoss.points.shuffle()
     return trainLoss to testLoss
 }
 
