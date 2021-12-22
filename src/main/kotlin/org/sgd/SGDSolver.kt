@@ -137,8 +137,9 @@ class ClusterParallelSGDSolver(
     private val threads: Int,
     stepDecay: Type,
     threadsPerCluster: Int,
-    private val stepsBeforeTokenPass: Int = 64,
-    private val tolerance: Type = 0.01.toType()
+    private val stepsBeforeTokenPass: Int = 100,
+    private val tolerance: Type = 0.01.toType(),
+    private val iterations: Int = 4
 ) : SGDSolver {
     private val clusters: List<List<Int>>
     private lateinit var stop: AtomicBoolean
@@ -165,14 +166,14 @@ class ClusterParallelSGDSolver(
             cores.indices
                 .map { i -> Thread { threadSolve(clustersData[clusterId], cores[i], i, cores[(i + 1) % cores.size], loss) } }
         }
-        val timeToLoss = measureIterations(testLoss, targetLoss, { getResults(w) }) {
-            stop = it
-            tasks
-                .onEach { it.start() }
-                .forEach { it.join() }
-        }
+//        val timeToLoss = measureIterations(testLoss, targetLoss, { getResults(w) }) {
+//            stop = it
+//        }
+        tasks
+            .onEach { it.start() }
+            .forEach { it.join() }
 
-        return SGDResult(getResults(w), timeToLoss)
+        return SGDResult(getResults(w), LinkedHashMap())
     }
 
     private fun getResults(buffer: TypeArray): TypeArray {
@@ -196,7 +197,7 @@ class ClusterParallelSGDSolver(
         var step = 0
         var locked = false
         val shouldSync = clusters.size > 1
-        val stop = stop
+//        val stop = stop
         val n = points.size
         val stepsBeforeTokenPass = stepsBeforeTokenPass
         val threads = threads
@@ -225,21 +226,18 @@ class ClusterParallelSGDSolver(
             }
         }
 
-        while (true) {
+        repeat(iterations) {
             repeat(end - start) {
-                if (stop.get()) {
-                    if (locked) {
-                        releaseToken(clusterData, nextThreadId)
-                    }
-                    return
-                }
                 loss.gradientStep(points[start + it], w, learningRate)
                 checkSync()
             }
             learningRate *= stepDecay
-            if (threadId == 0) {
-                points.shuffle()
-            }
+//            if (threadId == 0) {
+//                points.shuffle()
+//            }
+        }
+        if (locked) {
+            releaseToken(clusterData, nextThreadId)
         }
     }
 

@@ -118,12 +118,12 @@ private fun runParallelBenchmark(
     configureBenchmark: BenchmarkConfiguration<RunRegressionTask>.() -> Unit = {},
     plotExtra: BenchmarkResults<RunRegressionTask>.() -> Unit = {}
 ) {
-    val threadsPerCluster = logSequence(numaConfig.values.maxOf { it.size }).map { "$CLUSTER_METHOD_PREFIX$it" }.reversed()
+    val threadsPerCluster = logSequence(numaConfig.values.maxOf { it.size }).map { "$CLUSTER_METHOD_PREFIX$it" }
     val threads = logSequence(Runtime.getRuntime().availableProcessors())
     val p = params[dataset]!!
     runBenchmark<RunRegressionTask> {
         param(RunRegressionTask::dataset, dataset)
-        param(RunRegressionTask::method, "simple")
+        param(RunRegressionTask::method, threadsPerCluster)
         param(RunRegressionTask::learningRate, p["learningRate"])
         param(RunRegressionTask::stepDecay, p["stepDecay"])
         param(RunRegressionTask::targetLoss, p["targetLoss"])
