@@ -136,22 +136,22 @@ private fun runParallelBenchmark(
         plot(xParameter = RunRegressionTask::workingThreads) {
             commonConfigure(dataset, "time")
         }
-//        plot(xParameter = RunRegressionTask::workingThreads) {
-//            for (p: String in threadsPerCluster) {
-//                val oneThreadTime = iterationResults.entries.single {
-//                    val params = it.key.params
-//                    params[RunRegressionTask::method.name]!!.param == p &&
-//                        params[RunRegressionTask::workingThreads.name]!!.param == 1
-//                }.value.resultValue(benchmarkConfiguration)
-//                iterationResults.entries.filter {
-//                    it.key.params[RunRegressionTask::method.name]!!.param == p
-//                }.forEach {
-//                    it.value.metrics[SPEEDUP_METRIC] = oneThreadTime / it.value.resultValue(benchmarkConfiguration)
-//                }
-//            }
-//            commonConfigure(dataset, SPEEDUP_METRIC)
-//            valueAxis(ValueAxis.CustomMetric(SPEEDUP_METRIC))
-//        }
+        plot(xParameter = RunRegressionTask::workingThreads) {
+            for (p: String in threadsPerCluster) {
+                val oneThreadTime = iterationResults.entries.single {
+                    val params = it.key.params
+                    params[RunRegressionTask::method.name]!!.param == p &&
+                        params[RunRegressionTask::workingThreads.name]!!.param == 1
+                }.value.resultValue(benchmarkConfiguration)
+                iterationResults.entries.filter {
+                    it.key.params[RunRegressionTask::method.name]!!.param == p
+                }.forEach {
+                    it.value.metrics[SPEEDUP_METRIC] = oneThreadTime / it.value.resultValue(benchmarkConfiguration)
+                }
+            }
+            commonConfigure(dataset, SPEEDUP_METRIC)
+            valueAxis(ValueAxis.CustomMetric(SPEEDUP_METRIC))
+        }
         plotExtra()
     }
 }
