@@ -1,5 +1,6 @@
 plugins {
     kotlin("jvm") version "1.5.10"
+    id("me.champeau.jmh") version "0.6.6"
 }
 
 group = "org.example"
@@ -38,4 +39,10 @@ dependencies {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+}
+
+jmh {
+    includeTests.set(false)
+    failOnError.set(true)
+    profilers.add("perfasm")
 }
