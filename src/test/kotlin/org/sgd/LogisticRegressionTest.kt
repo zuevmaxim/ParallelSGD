@@ -123,7 +123,7 @@ private fun runParallelBenchmark(
     val p = params[dataset]!!
     runBenchmark<RunRegressionTask> {
         param(RunRegressionTask::dataset, dataset)
-        param(RunRegressionTask::method, threadsPerCluster)
+        param(RunRegressionTask::method, "simple")
         param(RunRegressionTask::learningRate, p["learningRate"])
         param(RunRegressionTask::stepDecay, p["stepDecay"])
         param(RunRegressionTask::targetLoss, p["targetLoss"])
@@ -137,7 +137,7 @@ private fun runParallelBenchmark(
             commonConfigure(dataset, "time")
         }
         plot(xParameter = RunRegressionTask::workingThreads) {
-            for (p: String in threadsPerCluster) {
+            for (p: String in listOf("simple")) {
                 val oneThreadTime = iterationResults.entries.single {
                     val params = it.key.params
                     params[RunRegressionTask::method.name]!!.param == p &&

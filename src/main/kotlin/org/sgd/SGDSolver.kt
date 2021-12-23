@@ -70,43 +70,44 @@ class SequentialSGDSolver(
 class ParallelSGDSolver(
     private val alpha: Type,
     private val threads: Int,
-    private val stepDecay: Type
+    private val stepDecay: Type,
+    private val iterations: Int = 10
 ) : SGDSolver {
-    private lateinit var stop: AtomicBoolean
+//    private lateinit var stop: AtomicBoolean
 
     override fun solve(loss: Model, testLoss: Model, targetLoss: Type): SGDResult {
         val w = loss.createWeights()
         val tasks = numaConfig.values.flatten().take(threads).mapIndexed { i, threadId -> Thread { threadSolve(w, threadId, i, loss) } }
-        val timeToLoss = measureIterations(testLoss, targetLoss, { w }) {
-            stop = it
-            tasks
-                .onEach { it.start() }
-                .forEach { it.join() }
-        }
+//        val timeToLoss = measureIterations(testLoss, targetLoss, { w }) {
+//            stop = it
+//        }
+        tasks
+            .onEach { it.start() }
+            .forEach { it.join() }
 
-        return SGDResult(w, timeToLoss)
+        return SGDResult(w, LinkedHashMap())
     }
 
     private fun threadSolve(w: TypeArray, threadId: Int, index: Int, loss: Model) {
         bindCurrentThreadToCpu(threadId)
         val points = loss.points
         var learningRate = alpha
-        val stop = stop
+//        val stop = stop
         val n = points.size
 
         val block = n / threads
         val start = block * index
         val end = if (index == threads - 1) n else start + block
 
-        while (true) {
+        repeat(iterations) {
             repeat(end - start) {
-                if (stop.get()) return
+//                if (stop.get()) return
                 loss.gradientStep(points[start + it], w, learningRate)
             }
             learningRate *= stepDecay
-            if (threadId == 0) {
-                points.shuffle()
-            }
+//            if (threadId == 0) {
+//                points.shuffle()
+//            }
         }
     }
 }
