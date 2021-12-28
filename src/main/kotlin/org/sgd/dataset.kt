@@ -17,13 +17,13 @@ fun Int.toType(): Type = toFloat()
 
 class DataPoint(val indices: IntArray, val xValues: TypeArray, val y: Type)
 
-class DataSet(val points: MutableList<DataPoint>) {
+class DataSet(val points: Array<DataPoint>) {
     val size get() = points.size
 
     fun split(part: Double): Pair<DataSet, DataSet> {
         require(0.0 < part && part < 1.0)
         val n = (size * part).toInt()
-        return DataSet(points.subList(0, n).toMutableList()) to DataSet(points.subList(n, size).toMutableList())
+        return DataSet(points.copyOfRange(0, n)) to DataSet(points.copyOfRange(n, size))
     }
 }
 
@@ -79,7 +79,7 @@ private inline fun loadDataSet(file: File, preprocessLabels: (String) -> Type): 
         }
     }
     println("Dataset ${file.name} loaded in ${timeMs / 1000} s")
-    return DataSet(points)
+    return DataSet(points.toTypedArray())
 }
 
 private fun loadBinaryDataSet(file: File) = loadDataSet(file) { label ->
@@ -136,7 +136,15 @@ inline fun repeat(n: Int, action: (Int) -> Unit) {
     }
 }
 
-fun <T> MutableList<T>.shuffle(start: Int = 0, end: Int = size) {
+inline fun iterate(start: Int, end: Int, action: (Int) -> Unit) {
+    var i = start
+    while (i < end) {
+        action(i)
+        i++
+    }
+}
+
+fun <T> Array<T>.shuffle(start: Int = 0, end: Int = size) {
     val n = end - start
     repeat(n) { i ->
         val j = Random.nextInt(i, n)
@@ -144,12 +152,12 @@ fun <T> MutableList<T>.shuffle(start: Int = 0, end: Int = size) {
     }
 }
 
-fun <T> MutableList<T>.swap(i: Int, j: Int) {
+fun <T> Array<T>.swap(i: Int, j: Int) {
     this[i] = this[j]
         .also { this[j] = this[i] }
 }
 
-fun <T> parallelShuffleTask(points: MutableList<T>, threadId: Int, threads: Int, status: AtomicIntArray) {
+fun <T> parallelShuffleTask(points: Array<T>, threadId: Int, threads: Int, status: AtomicIntArray) {
     val n = points.size
     if (n < 1000 || threads == 1) {
         points.shuffle()
@@ -177,7 +185,7 @@ fun <T> parallelShuffleTask(points: MutableList<T>, threadId: Int, threads: Int,
     }
 }
 
-private fun <T> MutableList<T>.mergeShuffle(left: Int, right: Int, end: Int) {
+private fun <T> Array<T>.mergeShuffle(left: Int, right: Int, end: Int) {
     var i = left
     var j = right
     while (true) {

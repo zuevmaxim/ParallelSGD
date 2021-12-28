@@ -100,9 +100,9 @@ class ParallelSGDSolver(
         val end = if (index == threads - 1) n else start + block
 
         repeat(iterations) {
-            repeat(end - start) {
+            iterate(start, end) { i ->
 //                if (stop.get()) return
-                loss.gradientStep(points[start + it], w, learningRate)
+                loss.gradientStep(points[i], w, learningRate)
             }
             learningRate *= stepDecay
 //            if (threadId == 0) {
@@ -195,35 +195,33 @@ class ClusterParallelSGDSolver(
         val points = loss.points
         var learningRate = alpha
 
-        var step = 0
         var locked = false
         val shouldSync = clusters.size > 1
 //        val stop = stop
         val n = points.size
         val stepsBeforeTokenPass = stepsBeforeTokenPass
+        var step = 8 * stepsBeforeTokenPass
         val threads = threads
         val block = n / threads
         val start = block * index
         val end = if (index == threads - 1) n else start + block
 
         fun checkSync(iteration: Int) {
-            if (shouldSync) {
-                if (!locked) {
-                    val tokenValue = token.value
-                    if (tokenValue >= 0 && clusterData.clusterId == tokenValue && threadId == clusterData.nextThread) {
-                        assert(token.compareAndSet(tokenValue, -(clusterData.clusterId + 1)))
-                        locked = true
-                        step = 0
-                        syncWithNext(clusterData, iteration)
-                    }
+            if (!shouldSync) return
+            if (!locked && step < 0 && threadId == clusterData.nextThread) {
+                val tokenValue = token.value
+                if (tokenValue >= 0 && clusterData.clusterId == tokenValue) {
+                    assert(token.compareAndSet(tokenValue, -(clusterData.clusterId + 1)))
+                    locked = true
+                    step = stepsBeforeTokenPass
+                    syncWithNext(clusterData, iteration)
                 }
-
-                step++
-
-                if (locked && step == stepsBeforeTokenPass) {
-                    releaseToken(clusterData, nextThreadId)
-                    locked = false
-                }
+            }
+            step--
+            if (locked && step == 0) {
+                releaseToken(clusterData, nextThreadId)
+                locked = false
+                step = stepsBeforeTokenPass * threads
             }
         }
 

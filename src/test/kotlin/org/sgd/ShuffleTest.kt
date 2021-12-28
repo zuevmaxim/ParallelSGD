@@ -15,7 +15,7 @@ import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.TimeUnit
 
 class ShuffleBenchmark(val workingThreads: Int, val size: Int) : Benchmark() {
-    val data = MutableList(1 shl size) { it }
+    val data = Array(1 shl size) { it }
     val status = AtomicIntArray(Runtime.getRuntime().availableProcessors())
     val barrier = CyclicBarrier(workingThreads)
 
