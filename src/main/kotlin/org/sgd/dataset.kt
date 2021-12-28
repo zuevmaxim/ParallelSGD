@@ -63,12 +63,14 @@ abstract class Model(dataSet: DataSet) {
 
 private inline fun loadDataSet(file: File, preprocessLabels: (String) -> Type): DataSet {
     val points = mutableListOf<DataPoint>()
+//    val lengthDistributions = sortedMapOf<Int, Int>()
     val timeMs = measureTimeMillis {
         file.useLines { lines ->
             lines.forEach { line ->
                 val parts = line.trim().split(" ")
                 val indices = IntArray(parts.size - 1)
                 val values = TypeArray(parts.size - 1)
+//                lengthDistributions[parts.size - 1] = 1 + (lengthDistributions[parts.size - 1] ?: 0)
                 repeat(parts.size - 1) { index ->
                     val (id, value) = parts[index + 1].split(':')
                     indices[index] = id.toInt()

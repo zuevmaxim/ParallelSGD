@@ -15,7 +15,7 @@ class LogisticRegressionModel(dataSet: DataSet, private val features: Int) : Mod
         repeat(indices.size) { i ->
             w[indices[i]] -= xs[i] * grad
         }
-        w[w.size - 1] -= grad
+//        w[w.size - 1] -= grad
     }
 
     override fun predict(w: TypeArray, indices: IntArray, xValues: TypeArray) =
@@ -95,7 +95,7 @@ private fun dot(w: TypeArray, indices: IntArray, xs: TypeArray): Type {
     repeat(indices.size) { i ->
         s += xs[i] * w[indices[i]]
     }
-    s += w[w.size - 1]
+//    s += w[w.size - 1]
     return s
 }
 

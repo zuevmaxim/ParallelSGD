@@ -8,6 +8,7 @@ import kotlinx.smartbench.graphic.Scaling
 import kotlinx.smartbench.graphic.ValueAxis
 import org.junit.jupiter.api.Test
 import java.util.concurrent.TimeUnit
+import kotlin.system.measureTimeMillis
 
 class LogisticRegressionTest {
     private val DATASET = "rcv1"
@@ -23,12 +24,22 @@ class LogisticRegressionTest {
 
     @Test
     fun run() {
-        val dataset = DATASET
+        val dataset = "rcv1"
         val loss = models[dataset]!!()
         val p = params[dataset]!!
-        val solver = ClusterParallelSGDSolver(p["learningRate"]!!, 128, p["stepDecay"]!!, 32)
-        val result = solver.solve(loss.first, loss.second, p["targetLoss"]!!)
-        println(loss.second.loss(result.w))
+        for (threads in logSequence(Runtime.getRuntime().availableProcessors())) {
+            repeat(5) {
+                val solver = ParallelSGDSolver(p["learningRate"]!!, threads, p["stepDecay"]!!)
+                solver.solve(loss.first, loss.second, p["targetLoss"]!!)
+            }
+            val timeMs = measureTimeMillis {
+                repeat(10) {
+                    val solver = ParallelSGDSolver(p["learningRate"]!!, threads, p["stepDecay"]!!)
+                    solver.solve(loss.first, loss.second, p["targetLoss"]!!)
+                }
+            }
+            println("$threads $timeMs")
+        }
     }
 
     @Test

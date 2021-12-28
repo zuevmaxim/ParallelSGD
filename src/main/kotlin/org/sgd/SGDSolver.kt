@@ -89,15 +89,15 @@ class ParallelSGDSolver(
     }
 
     private fun threadSolve(w: TypeArray, threadId: Int, index: Int, loss: Model) {
-        bindCurrentThreadToCpu(threadId)
-        val points = loss.points
+//        bindCurrentThreadToCpu(threadId)
         var learningRate = alpha
-//        val stop = stop
+        val points = loss.points
         val n = points.size
+//        val stop = stop
 
         val block = n / threads
         val start = block * index
-        val end = if (index == threads - 1) n else start + block
+        val end = if (index == threads - 1) n else min(n, start + block)
 
         repeat(iterations) {
             iterate(start, end) { i ->
